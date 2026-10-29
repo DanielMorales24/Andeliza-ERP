@@ -4,8 +4,20 @@
     {
       "src": "api/index.js",
       "use": "@vercel/node",
-      "config": { "includeFiles": ["views/**", "public/**", "client.config.js"] }
+      "config": {
+        "includeFiles": [
+          "views/**",
+          "public/**",
+          "client.config.js",
+          "node_modules/pdfkit/**"
+        ]
+      }
     }
   ],
-  "routes": [{ "src": "/(.*)", "dest": "api/index.js" }]
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index.js"
+    }
+  ]
 }

@@ -1,0 +1,440 @@
+<script type="application/json" id="datos-pagina"><%- JSON.stringify(datos).replace(/</g, '\\u003c') %></script>
+
+<div x-data="pos"
+     class="pb-24 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start lg:gap-6 lg:pb-0"
+     x-effect="document.body.classList.toggle('overflow-hidden', (drawer && !escritorio) || !!mv || mc)"
+     @keydown.escape.window="mv ? cerrarVariante() : (mc ? cerrarNuevoCliente() : (drawer = false))"
+     @keydown.window="if ($event.key === '/' && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) { $event.preventDefault(); document.getElementById('pos-buscar').focus(); }"
+     @visibilitychange.document="alVolver()">
+
+  <!-- ====================== CATÁLOGO ====================== -->
+  <section aria-label="Catálogo de productos" class="min-w-0">
+
+    <!-- Buscador y categorías (se quedan visibles al desplazarse) -->
+    <div class="sticky top-14 z-10 -mx-4 bg-fondo px-4 pb-3 pt-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0">
+      <div class="flex gap-2">
+        <div class="relative min-w-0 flex-1">
+          <svg class="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="pos-buscar" type="search" x-model="busqueda" @keydown.enter.prevent="buscarEnter()"
+                 placeholder="Buscar por nombre o SKU" aria-label="Buscar producto" autocomplete="off"
+                 class="campo h-12 pl-11 pr-3 text-base">
+        </div>
+        <div class="inline-flex flex-none rounded-md border border-borde bg-white p-0.5" role="group" aria-label="Tipo de vista">
+          <button type="button" @click="cambiarVista('tarjetas')" :aria-pressed="vista === 'tarjetas'" aria-label="Ver en tarjetas"
+                  class="flex h-11 w-11 items-center justify-center rounded" :class="vista === 'tarjetas' ? 'bg-primario text-white' : 'text-gray-500 hover:bg-fondo'">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1"/></svg>
+          </button>
+          <button type="button" @click="cambiarVista('lista')" :aria-pressed="vista === 'lista'" aria-label="Ver en lista"
+                  class="flex h-11 w-11 items-center justify-center rounded" :class="vista === 'lista' ? 'bg-primario text-white' : 'text-gray-500 hover:bg-fondo'">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0" x-show="categorias.length > 0" x-cloak role="group" aria-label="Filtrar por categoría">
+        <button type="button" @click="categoria = ''" :aria-pressed="categoria === ''"
+                class="h-11 flex-none whitespace-nowrap rounded-full border px-4 text-sm font-medium"
+                :class="categoria === '' ? 'border-primario bg-primario text-white' : 'border-borde bg-white hover:bg-fondo'">Todas</button>
+        <template x-for="c in categorias" :key="c">
+          <button type="button" @click="categoria = (categoria === c ? '' : c)" :aria-pressed="categoria === c"
+                  class="h-11 flex-none whitespace-nowrap rounded-full border px-4 text-sm font-medium"
+                  :class="categoria === c ? 'border-primario bg-primario text-white' : 'border-borde bg-white hover:bg-fondo'" x-text="c"></button>
+        </template>
+      </div>
+    </div>
+
+    <!-- Estados vacíos -->
+    <div x-show="productos.length === 0" x-cloak class="mt-4 rounded-md border border-dashed border-borde bg-white px-6 py-14 text-center">
+      <p class="font-titulo text-xl font-semibold">No hay productos para vender.</p>
+      <p class="mt-1 text-sm text-gray-600">Crea productos activos en Inventario para que aparezcan aquí.</p>
+    </div>
+    <div x-show="productos.length > 0 && filtrados.length === 0" x-cloak class="mt-4 rounded-md border border-borde bg-white px-6 py-12 text-center">
+      <p class="font-medium">Sin resultados</p>
+      <p class="mt-1 text-sm text-gray-600">Prueba con otro nombre o SKU, o cambia de categoría.</p>
+    </div>
+
+    <!-- Tarjetas -->
+    <div x-show="vista === 'tarjetas' && filtrados.length > 0" x-cloak class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+      <template x-for="p in visibles" :key="p.id">
+        <button type="button" @click="tocar(p)" :disabled="agotado(p)"
+                :aria-label="'Agregar ' + p.nombre + ', ' + dinero(p.precio_venta)"
+                class="group flex flex-col overflow-hidden rounded-md border border-borde bg-white text-left transition hover:border-primario/50 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:border-borde disabled:active:scale-100">
+          <div class="relative aspect-[4/3] bg-primario/5">
+            <img x-show="p.imagen_url" :src="p.imagen_url" loading="lazy" alt="" class="h-full w-full object-cover">
+            <div x-show="!p.imagen_url" class="flex h-full items-center justify-center font-titulo text-4xl font-semibold text-primario/35" x-text="iniciales(p.nombre)"></div>
+            <span class="insignia ins-marca absolute left-2 top-2 !bg-white" x-show="p.es_compuesto">Kit</span>
+            <span class="absolute right-2 top-2 flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-primario px-1.5 text-xs font-semibold text-white" x-show="enCarrito(p) > 0" x-text="cantidad(enCarrito(p))"></span>
+          </div>
+          <div class="flex flex-1 flex-col p-3">
+            <h3 class="line-clamp-2 text-sm font-medium leading-snug" x-text="p.nombre"></h3>
+            <p class="mt-1 font-titulo text-xl font-semibold tabular-nums" x-text="dinero(p.precio_venta)"></p>
+            <div class="mt-auto pt-2">
+              <span class="insignia" :class="estadoStock(p).clase" x-text="estadoStock(p).texto"></span>
+              <span class="mt-1 block text-xs text-gray-500" x-show="p.variantes.length > 0" x-text="p.variantes.length + (p.variantes.length === 1 ? ' variante' : ' variantes')"></span>
+            </div>
+          </div>
+        </button>
+      </template>
+    </div>
+
+    <!-- Lista -->
+    <div x-show="vista === 'lista' && filtrados.length > 0" x-cloak class="mt-3 divide-y divide-borde overflow-hidden rounded-md border border-borde bg-white">
+      <template x-for="p in visibles" :key="p.id">
+        <button type="button" @click="tocar(p)" :disabled="agotado(p)" :aria-label="'Agregar ' + p.nombre + ', ' + dinero(p.precio_venta)"
+                class="flex min-h-[3.75rem] w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-fondo/70 active:bg-fondo disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:bg-transparent">
+          <img x-show="p.imagen_url" :src="p.imagen_url" loading="lazy" alt="" class="h-11 w-11 flex-none rounded-md border border-borde object-cover">
+          <div x-show="!p.imagen_url" class="flex h-11 w-11 flex-none items-center justify-center rounded-md bg-primario/10 font-titulo text-base font-semibold text-primario" x-text="iniciales(p.nombre)"></div>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-medium"><span x-text="p.nombre"></span><span class="insignia ins-marca ml-2" x-show="p.es_compuesto">Kit</span></p>
+            <p class="truncate text-xs text-gray-500"><span x-text="p.sku || 'Sin SKU'"></span><span x-show="p.variantes.length > 0" x-text="'   ' + p.variantes.length + ' variantes'"></span></p>
+          </div>
+          <div class="flex-none text-right">
+            <p class="font-medium tabular-nums" x-text="dinero(p.precio_venta)"></p>
+            <span class="insignia" :class="estadoStock(p).clase" x-text="estadoStock(p).texto"></span>
+          </div>
+          <span class="relative flex h-9 w-9 flex-none items-center justify-center rounded-full bg-primario/10 text-primario" aria-hidden="true">
+            <span x-show="enCarrito(p) === 0" class="text-xl leading-none">+</span>
+            <span x-show="enCarrito(p) > 0" class="text-sm font-semibold" x-text="cantidad(enCarrito(p))"></span>
+          </span>
+        </button>
+      </template>
+    </div>
+
+    <div x-show="filtrados.length > limite" x-cloak class="mt-4 text-center">
+      <button type="button" class="btn btn-secundario" @click="limite += 48">Mostrar más (<span x-text="filtrados.length - limite"></span> restantes)</button>
+    </div>
+  </section>
+
+  <!-- ====================== BARRA FLOTANTE (móvil y tablet) ====================== -->
+  <div class="fixed inset-x-0 bottom-0 z-30 bg-gradient-to-t from-fondo via-fondo/95 to-transparent px-3 pt-4 lg:hidden"
+       style="padding-bottom: calc(.75rem + env(safe-area-inset-bottom, 0px))" x-show="!drawer" x-cloak>
+    <button type="button" @click="drawer = true"
+            class="btn btn-primario h-14 w-full justify-between rounded-xl px-5 text-base shadow-lg"
+            :aria-label="'Ver carrito, ' + cantidad(unidades) + ' artículos, total ' + dinero(totales.total)">
+      <span class="flex items-center gap-2">
+        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.2"/><circle cx="18" cy="20" r="1.2"/><path d="M2 3h3l2.4 11.5a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1L21 8H6"/></svg>
+        <span x-text="exito ? 'Venta registrada' : 'Ver carrito'"></span>
+        <span class="flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-white/25 px-1.5 text-sm" x-show="carrito.length > 0 && !exito" x-text="cantidad(unidades)"></span>
+      </span>
+      <span class="tabular-nums" x-text="dinero(exito ? exito.total : totales.total)"></span>
+    </button>
+  </div>
+
+  <!-- Fondo oscuro detrás del panel del carrito (solo móvil) -->
+  <div x-show="drawer && !escritorio" x-cloak class="fixed inset-0 z-40 bg-tinta/50 lg:hidden"
+       x-transition:enter="transition-opacity duration-150" x-transition:enter-start="opacity-0"
+       x-transition:leave="transition-opacity duration-100" x-transition:leave-end="opacity-0"
+       @click="drawer = false"></div>
+
+  <!-- ====================== CARRITO ====================== -->
+  <aside aria-label="Venta actual" :inert="!escritorio && !drawer"
+         :class="drawer ? 'translate-y-0' : 'translate-y-full'"
+         class="fixed inset-x-0 bottom-0 z-40 flex max-h-[88vh] flex-col rounded-t-2xl border border-borde bg-white shadow-2xl transition-transform duration-200 ease-out
+                lg:sticky lg:top-[4.5rem] lg:z-10 lg:h-[calc(100vh-6rem)] lg:max-h-none lg:translate-y-0 lg:rounded-md lg:shadow-none">
+
+    <!-- Encabezado -->
+    <header class="flex items-center gap-2 border-b border-borde px-4 py-3">
+      <h2 class="font-titulo text-xl font-semibold">Venta actual</h2>
+      <span class="flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-primario/10 px-1.5 text-sm font-semibold text-primario" x-show="carrito.length > 0 && !exito" x-text="cantidad(unidades)"></span>
+      <div class="ml-auto flex items-center gap-1">
+        <button type="button" class="btn-texto peligro" x-show="carrito.length > 0 && !exito" @click="vaciar()" x-text="confirmarVaciar ? '¿Seguro? Vaciar' : 'Vaciar'"></button>
+        <button type="button" @click="drawer = false" class="-mr-2 rounded p-2 text-gray-500 hover:bg-fondo hover:text-gray-800 lg:hidden" aria-label="Cerrar carrito">
+          <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ============ Vista normal ============ -->
+    <template x-if="!exito">
+      <div class="flex min-h-0 flex-1 flex-col">
+
+        <!-- Cliente -->
+        <div class="relative border-b border-borde px-4 py-3" @click.outside="listaCliente = false">
+          <template x-if="!cliente">
+            <div>
+              <label class="etiqueta" for="pos-cliente">Cliente</label>
+              <div class="flex gap-2">
+                <input id="pos-cliente" x-model="qCliente" class="campo h-11 min-w-0 flex-1" autocomplete="off"
+                       placeholder="Consumidor Final (busca por nombre, teléfono o RTN)"
+                       role="combobox" :aria-expanded="listaCliente && resultadosCliente.length > 0" aria-controls="pos-clientes-lista"
+                       @input="listaCliente = true; idxCliente = -1" @focus="listaCliente = true"
+                       @keydown.arrow-down.prevent="moverCliente(1)" @keydown.arrow-up.prevent="moverCliente(-1)"
+                       @keydown.enter.prevent="enterCliente()" @keydown.escape.stop="listaCliente = false">
+                <button type="button" class="btn btn-secundario h-11 flex-none px-3" @click="abrirNuevoCliente()">Nuevo</button>
+              </div>
+              <ul id="pos-clientes-lista" role="listbox" x-show="listaCliente && qCliente.trim() !== ''" x-cloak
+                  class="absolute inset-x-4 z-20 mt-1 max-h-64 overflow-auto rounded-md border border-borde bg-white py-1 shadow-lg">
+                <template x-for="(c, i) in resultadosCliente" :key="c.id">
+                  <li role="option" :aria-selected="i === idxCliente">
+                    <button type="button" @click="elegirCliente(c)" @mouseenter="idxCliente = i"
+                            class="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm" :class="i === idxCliente ? 'bg-fondo' : 'hover:bg-fondo'">
+                      <span class="truncate font-medium" x-text="c.nombre"></span>
+                      <span class="flex-none text-xs text-gray-500" x-text="c.telefono || c.rtn || ''"></span>
+                    </button>
+                  </li>
+                </template>
+                <li x-show="resultadosCliente.length === 0" class="px-3 py-3 text-sm text-gray-600">
+                  No hay clientes con «<span x-text="qCliente.trim()"></span>».
+                  <button type="button" class="font-medium text-primario hover:underline" @click="abrirNuevoCliente()">Crear cliente nuevo</button>
+                </li>
+              </ul>
+              <p class="ayuda">Si no eliges cliente, la venta sale a nombre de Consumidor Final.</p>
+            </div>
+          </template>
+
+          <template x-if="cliente">
+            <div class="flex items-center gap-3 rounded-md bg-fondo px-3 py-2.5">
+              <div class="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-primario/10 font-titulo text-base font-semibold text-primario" x-text="iniciales(cliente.nombre)"></div>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-medium" x-text="cliente.nombre"></p>
+                <p class="truncate text-xs text-gray-500" x-text="[cliente.rtn ? 'RTN ' + cliente.rtn : '', cliente.telefono].filter(Boolean).join('   ') || 'Sin RTN ni teléfono'"></p>
+              </div>
+              <button type="button" class="btn-texto apagar flex-none" @click="quitarCliente()">Quitar</button>
+            </div>
+          </template>
+        </div>
+
+        <!-- Líneas -->
+        <div class="min-h-0 flex-1 overflow-y-auto px-4">
+          <div x-show="carrito.length === 0" class="flex h-full min-h-[9rem] flex-col items-center justify-center py-8 text-center">
+            <svg class="h-10 w-10 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.2"/><circle cx="18" cy="20" r="1.2"/><path d="M2 3h3l2.4 11.5a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1L21 8H6"/></svg>
+            <p class="mt-3 font-medium">El carrito está vacío</p>
+            <p class="mt-1 text-sm text-gray-600">Toca un producto para agregarlo.</p>
+          </div>
+
+          <ul class="divide-y divide-borde" x-show="carrito.length > 0">
+            <template x-for="(l, i) in carrito" :key="l.uid">
+              <li class="py-3">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium leading-snug" x-text="l.nombre"></p>
+                    <p class="mt-0.5 text-xs text-gray-500" x-show="l.detalle || l.esKit"><span x-text="l.detalle"></span><span x-show="l.esKit">Kit</span></p>
+                  </div>
+                  <p class="flex-none font-medium tabular-nums" x-text="dinero(totales.importes[i])"></p>
+                </div>
+                <div class="mt-2 flex items-center justify-between gap-2">
+                  <p class="text-xs text-gray-500"><span x-text="dinero(l.precio)"></span> c/u</p>
+                  <div class="flex items-center gap-1.5">
+                    <button type="button" class="paso" @click="restar(l)" :disabled="l.cantidad <= 1" :aria-label="'Quitar una unidad de ' + l.nombre">&minus;</button>
+                    <input class="cant" inputmode="decimal" autocomplete="off" :value="cantidad(l.cantidad)" :aria-label="'Cantidad de ' + l.nombre"
+                           @change="fijarCantidad(l, $event.target.value, $event.target)" @focus="$event.target.select()" @keydown.enter.prevent="$event.target.blur()">
+                    <button type="button" class="paso" @click="sumar(l)" :disabled="disponibleLinea(l) < 1" :aria-label="'Agregar una unidad de ' + l.nombre">+</button>
+                    <button type="button" class="paso !border-transparent text-gray-400 hover:!bg-red-50 hover:text-red-600" @click="quitar(l)" :aria-label="'Quitar ' + l.nombre + ' del carrito'">
+                      <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <p class="mt-1 text-right text-xs text-amber-700" x-show="disponibleLinea(l) < 1">No hay más stock para agregar</p>
+              </li>
+            </template>
+          </ul>
+        </div>
+
+        <!-- Totales y cobro -->
+        <footer class="border-t border-borde bg-white px-4 pb-4 pt-3" style="padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px))">
+          <p class="mb-2 flex items-center gap-1.5 text-xs" :class="avisoFacturacion ? 'text-amber-700' : 'text-gray-500'" x-show="etiquetaFacturacion">
+            <span class="inline-block h-1.5 w-1.5 rounded-full" :class="avisoFacturacion ? 'bg-amber-500' : (d.facturacion && d.facturacion.modo === 'interno' ? 'bg-gray-400' : 'bg-emerald-500')"></span>
+            <span x-text="etiquetaFacturacion"></span>
+          </p>
+
+          <dl class="space-y-1 text-sm">
+            <div class="flex justify-between"><dt class="text-gray-600">Subtotal</dt><dd class="tabular-nums" x-text="dinero(totales.subtotal)"></dd></div>
+            <div class="flex justify-between"><dt class="text-gray-600">Impuesto (<span x-text="tasaPorcentaje"></span>%)</dt><dd class="tabular-nums" x-text="dinero(totales.impuesto)"></dd></div>
+            <div class="flex items-baseline justify-between border-t border-borde pt-2">
+              <dt class="font-medium">Total</dt>
+              <dd class="font-titulo text-3xl font-semibold tabular-nums" x-text="dinero(totales.total)"></dd>
+            </div>
+          </dl>
+          <p class="mt-1 text-xs text-gray-500" x-show="d.impuestoIncluido && carrito.length > 0">Los precios ya incluyen el impuesto.</p>
+
+          <label class="mt-3 flex min-h-[2.75rem] cursor-pointer items-center gap-3 rounded-md border border-borde px-3 py-2">
+            <input type="checkbox" class="interruptor" x-model="pendiente" @change="cambioCarrito()">
+            <span class="text-sm">
+              <span class="font-medium">Dejar pendiente de pago</span>
+              <span class="block text-xs text-gray-500">Para ventas a crédito. Se marca como pagada después, en Facturas.</span>
+            </span>
+          </label>
+
+          <div x-show="errorCobro" x-cloak role="alert" class="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="errorCobro"></div>
+
+          <button type="button" class="btn btn-primario mt-3 h-14 w-full text-base" :disabled="carrito.length === 0 || cobrando" @click="cobrar()">
+            <span x-text="cobrando ? 'Cobrando…' : (carrito.length ? 'Cobrar ' + dinero(totales.total) : 'Cobrar')"></span>
+          </button>
+          <button type="button" class="btn btn-secundario mt-2 w-full" :disabled="carrito.length === 0 || cobrando" @click="cotizar()">Cotización en PDF</button>
+        </footer>
+      </div>
+    </template>
+
+    <!-- ============ Vista de éxito ============ -->
+    <template x-if="exito">
+      <div class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 text-center" role="status">
+        <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+          <svg class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        </div>
+        <h3 class="mt-3 font-titulo text-2xl font-semibold">Venta registrada</h3>
+
+        <div class="mt-3 flex flex-wrap items-center justify-center gap-2">
+          <span class="insignia" :class="exito.tipo_documento === 'fiscal' ? 'ins-ok' : 'ins-bajo'" x-text="exito.tipo_documento === 'fiscal' ? 'Factura fiscal (CAI)' : 'Comprobante interno'"></span>
+          <span class="insignia" :class="exito.estado === 'C' ? 'ins-ok' : 'ins-bajo'" x-text="exito.estado === 'C' ? 'Pagada' : 'Pendiente de pago'"></span>
+        </div>
+        <p class="mt-3 font-titulo text-xl font-semibold tabular-nums" x-text="'No. ' + exito.numero_corto"></p>
+        <p class="mt-0.5 text-xs text-gray-500" x-show="exito.tipo_documento === 'interno'">No válido para crédito fiscal</p>
+
+        <p class="mt-4 font-titulo text-4xl font-semibold tabular-nums" x-text="dinero(exito.total)"></p>
+        <p class="mt-1 text-sm text-gray-600">Cliente: <span class="font-medium text-tinta" x-text="exito.cliente"></span></p>
+
+        <ul class="mx-auto mt-4 w-full max-w-sm divide-y divide-borde rounded-md border border-borde text-left text-sm">
+          <template x-for="it in exito.items" :key="it.nombre + it.detalle">
+            <li class="flex items-start justify-between gap-3 px-3 py-2">
+              <span class="min-w-0"><span x-text="cantidad(it.cantidad) + ' × ' + it.nombre"></span><span class="block text-xs text-gray-500" x-show="it.detalle" x-text="it.detalle"></span></span>
+              <span class="flex-none tabular-nums" x-text="dinero(it.importe)"></span>
+            </li>
+          </template>
+        </ul>
+
+        <div class="mx-auto mt-5 w-full max-w-sm space-y-2">
+          <a :href="'/facturas/' + exito.id + '/pdf'" target="_blank" rel="noopener" class="btn btn-primario h-14 w-full text-base">Imprimir PDF</a>
+          <a :href="'/facturas/' + exito.id + '/pdf?descargar=1'" class="btn btn-secundario w-full">Descargar PDF</a>
+          <button type="button" class="btn btn-secundario w-full" @click="nuevaVenta()">Nueva venta</button>
+        </div>
+      </div>
+    </template>
+  </aside>
+
+  <!-- Formulario oculto: la cotización se abre en otra pestaña -->
+  <form x-ref="formCot" method="post" action="/pos/cotizacion" target="_blank" class="hidden" aria-hidden="true">
+    <input type="hidden" name="datos" x-ref="datosCot">
+  </form>
+
+  <!-- ====================== MODAL: ELEGIR VARIANTE ====================== -->
+  <div id="modal-variante" x-show="mv" x-cloak class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" :aria-label="mv ? 'Elegir variante de ' + mv.p.nombre : ''">
+    <div class="absolute inset-0 bg-tinta/50" x-show="mv"
+         x-transition:enter="transition-opacity duration-150" x-transition:enter-start="opacity-0"
+         x-transition:leave="transition-opacity duration-100" x-transition:leave-end="opacity-0"
+         @click="cerrarVariante()"></div>
+
+    <div x-show="mv" class="relative flex max-h-[92vh] w-full max-w-md flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-lg"
+         x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-6 opacity-0 sm:translate-y-2 sm:scale-95"
+         x-transition:leave="transition duration-100 ease-in" x-transition:leave-end="translate-y-4 opacity-0 sm:scale-95">
+      <template x-if="mv">
+        <div class="flex min-h-0 flex-1 flex-col">
+          <header class="flex items-start gap-3 border-b border-borde px-5 py-4">
+            <div class="min-w-0 flex-1">
+              <h2 class="font-titulo text-xl font-semibold leading-tight" x-text="mv.p.nombre"></h2>
+              <p class="mt-0.5 font-medium tabular-nums text-gray-600" x-text="dinero(mv.p.precio_venta)"></p>
+            </div>
+            <button type="button" @click="cerrarVariante()" class="-mr-2 -mt-1 rounded p-2 text-gray-500 hover:bg-fondo hover:text-gray-800" aria-label="Cerrar">
+              <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+            </button>
+          </header>
+
+          <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            <!-- Un grupo de opciones por cada tipo (talla, equipo...) -->
+            <template x-for="tipo in tiposDe(mv.p)" :key="tipo">
+              <div class="mb-4">
+                <p class="text-sm font-medium"><span class="capitalize" x-text="tipo"></span><span class="font-normal text-gray-500" x-show="mv.sel[tipo]" x-text="': ' + mv.sel[tipo]"></span></p>
+                <div class="mt-2 flex flex-wrap gap-2">
+                  <template x-for="valor in valoresDe(mv.p, tipo)" :key="valor">
+                    <button type="button" @click="elegirValor(tipo, valor)" :disabled="!valorExiste(tipo, valor)" :aria-pressed="mv.sel[tipo] === valor"
+                            :title="!valorExiste(tipo, valor) ? 'Agotado' : (!valorDisponible(tipo, valor) ? 'No hay con la opción elegida' : null)"
+                            class="h-11 min-w-[3rem] rounded-md border px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:border-dashed disabled:text-gray-400 disabled:line-through"
+                            :class="[mv.sel[tipo] === valor ? 'border-primario bg-primario text-white' : 'border-borde bg-white hover:bg-fondo disabled:hover:bg-white', (valorExiste(tipo, valor) && !valorDisponible(tipo, valor)) ? 'text-gray-400 line-through' : '']" x-text="valor"></button>
+                  </template>
+                </div>
+              </div>
+            </template>
+            <!-- Variantes sin atributos: se eligen por su nombre -->
+            <template x-if="tiposDe(mv.p).length === 0">
+              <div class="mb-4">
+                <p class="text-sm font-medium">Opción</p>
+                <div class="mt-2 flex flex-wrap gap-2">
+                  <template x-for="v in mv.p.variantes" :key="v.id">
+                    <button type="button" @click="elegirDirecta(v)" :disabled="disponible(mv.p, v.id) <= 0" :aria-pressed="mv.directa === v.id"
+                            class="h-11 rounded-md border px-4 text-sm font-medium disabled:cursor-not-allowed disabled:border-dashed disabled:text-gray-400 disabled:line-through"
+                            :class="mv.directa === v.id ? 'border-primario bg-primario text-white' : 'border-borde bg-white hover:bg-fondo'" x-text="v.nombre"></button>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <p class="text-sm" x-show="varianteElegida">
+              <span class="text-gray-600">Disponible: </span><span class="font-medium tabular-nums" x-text="cantidad(disponibleVariante)"></span>
+              <span class="text-gray-500" x-show="varianteElegida && varianteElegida.sku" x-text="'   SKU ' + (varianteElegida ? varianteElegida.sku : '')"></span>
+            </p>
+            <p class="text-sm text-gray-500" x-show="!varianteElegida">Elige las opciones para ver cuántas hay.</p>
+
+            <div class="mt-4 flex items-center gap-3">
+              <span class="text-sm font-medium">Cantidad</span>
+              <div class="flex items-center gap-1.5">
+                <button type="button" class="paso" @click="cambiarCantidadVariante(-1)" :disabled="!varianteElegida || mv.cantidad <= 1" aria-label="Una unidad menos">&minus;</button>
+                <input class="cant" inputmode="numeric" autocomplete="off" :value="mv.cantidad" :disabled="!varianteElegida" aria-label="Cantidad"
+                       @change="escribirCantidadVariante($event.target.value); $event.target.value = mv.cantidad" @focus="$event.target.select()" @keydown.enter.prevent="confirmarVariante()">
+                <button type="button" class="paso" @click="cambiarCantidadVariante(1)" :disabled="!varianteElegida || mv.cantidad >= disponibleVariante" aria-label="Una unidad más">+</button>
+              </div>
+            </div>
+            <p class="mt-2 text-sm text-amber-700" x-show="mv.error" x-text="mv.error" role="alert"></p>
+          </div>
+
+          <footer class="flex gap-2 border-t border-borde bg-fondo/60 px-5 py-3 sm:rounded-b-lg" style="padding-bottom: calc(.75rem + env(safe-area-inset-bottom, 0px))">
+            <button type="button" class="btn btn-secundario flex-1" @click="cerrarVariante()">Cancelar</button>
+            <button type="button" class="btn btn-primario flex-[2]" :disabled="!varianteElegida || disponibleVariante < 1" @click="confirmarVariante()">
+              <span x-text="varianteElegida ? 'Agregar ' + dinero(Number(mv.p.precio_venta) * (Number(mv.cantidad) || 1)) : 'Agregar al carrito'"></span>
+            </button>
+          </footer>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- ====================== MODAL: CLIENTE NUEVO ====================== -->
+  <div x-show="mc" x-cloak class="fixed inset-0 z-[55] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Cliente nuevo">
+    <div class="absolute inset-0 bg-tinta/50" x-show="mc"
+         x-transition:enter="transition-opacity duration-150" x-transition:enter-start="opacity-0"
+         x-transition:leave="transition-opacity duration-100" x-transition:leave-end="opacity-0"
+         @click="cerrarNuevoCliente()"></div>
+
+    <form x-show="mc" @submit.prevent="guardarCliente()" novalidate
+          class="relative flex max-h-[92vh] w-full max-w-md flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-lg"
+          x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-6 opacity-0 sm:translate-y-2 sm:scale-95"
+          x-transition:leave="transition duration-100 ease-in" x-transition:leave-end="translate-y-4 opacity-0 sm:scale-95">
+      <header class="flex items-center justify-between border-b border-borde px-5 py-4">
+        <h2 class="font-titulo text-xl font-semibold">Cliente nuevo</h2>
+        <button type="button" @click="cerrarNuevoCliente()" class="-mr-2 rounded p-2 text-gray-500 hover:bg-fondo hover:text-gray-800" aria-label="Cerrar">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </header>
+
+      <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5">
+        <p class="rounded bg-fondo px-3 py-2 text-sm text-gray-600">Tu venta no se pierde: al guardar, el cliente queda elegido en el carrito.</p>
+        <div x-show="errorCliente" x-cloak role="alert" class="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="errorCliente"></div>
+
+        <div>
+          <label class="etiqueta" for="nc-nombre">Nombre <span class="text-red-600" aria-hidden="true">*</span></label>
+          <input id="nc-nombre" class="campo" x-model="fc.nombre" maxlength="150" autocomplete="off" required>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="etiqueta" for="nc-telefono">Teléfono</label>
+            <input id="nc-telefono" class="campo" type="tel" inputmode="tel" x-model="fc.telefono" maxlength="30" autocomplete="off">
+          </div>
+          <div>
+            <label class="etiqueta" for="nc-rtn">RTN</label>
+            <input id="nc-rtn" class="campo" inputmode="numeric" x-model="fc.rtn" maxlength="20" autocomplete="off">
+            <p class="ayuda">Opcional.</p>
+          </div>
+        </div>
+        <div>
+          <label class="etiqueta" for="nc-correo">Correo</label>
+          <input id="nc-correo" class="campo" type="email" inputmode="email" x-model="fc.correo" maxlength="150" autocomplete="off">
+        </div>
+      </div>
+
+      <footer class="flex justify-end gap-2 border-t border-borde bg-fondo/60 px-5 py-3 sm:rounded-b-lg" style="padding-bottom: calc(.75rem + env(safe-area-inset-bottom, 0px))">
+        <button type="button" class="btn btn-secundario" @click="cerrarNuevoCliente()" :disabled="guardandoCliente">Cancelar</button>
+        <button type="submit" class="btn btn-primario" :disabled="guardandoCliente" x-text="guardandoCliente ? 'Guardando…' : 'Guardar y usar'"></button>
+      </footer>
+    </form>
+  </div>
+</div>
+
+<script src="/js/pos.js"></script>

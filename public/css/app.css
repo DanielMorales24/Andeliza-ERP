@@ -64,6 +64,21 @@ input.interruptor:checked { background: var(--primario); }
 input.interruptor:checked::after { transform: translateX(1rem); }
 input.interruptor:disabled { opacity: .5; cursor: not-allowed; }
 
+/* Botones de cantidad del POS: 44 px, el mínimo cómodo para tocar con el dedo */
+.paso {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 2.75rem; height: 2.75rem; border: 1px solid var(--borde); border-radius: .5rem; background: #fff;
+  font-size: 1.375rem; line-height: 1; color: var(--tinta); cursor: pointer; transition: background-color .15s, border-color .15s;
+}
+.paso:hover:not(:disabled) { background: var(--fondo); }
+.paso:active:not(:disabled) { background: color-mix(in srgb, var(--primario) 12%, #fff); border-color: var(--primario); }
+.paso:disabled { opacity: .35; cursor: not-allowed; }
+.cant {
+  width: 3.5rem; height: 2.75rem; text-align: center; border: 1px solid var(--borde); border-radius: .5rem;
+  background: #fff; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--tinta);
+}
+.cant:focus { outline: none; border-color: var(--primario); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primario) 22%, transparent); }
+
 /* Lo que se anima responde a una acción de la persona; se respeta "reducir movimiento" */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }

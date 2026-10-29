@@ -194,7 +194,7 @@ BEGIN
 
         IF v_comp.stock < v_comp.cant * v_cantidad THEN
           RAISE EXCEPTION 'Stock insuficiente de "%" (componente del kit "%"). Disponible: %.',
-            v_comp.nombre, v_prod.nombre, v_comp.stock;
+            v_comp.nombre, v_prod.nombre, trim_scale(v_comp.stock);
         END IF;
 
         UPDATE productos SET stock = stock - (v_comp.cant * v_cantidad) WHERE id = v_comp.id;
@@ -217,7 +217,7 @@ BEGIN
 
       IF v_var.stock < v_cantidad THEN
         RAISE EXCEPTION 'Stock insuficiente de "%" (%). Disponible: %.',
-          v_prod.nombre, v_var.nombre_variante, v_var.stock;
+          v_prod.nombre, v_var.nombre_variante, trim_scale(v_var.stock);
       END IF;
 
       UPDATE variantes_producto SET stock = stock - v_cantidad WHERE id = v_var.id;
@@ -229,7 +229,7 @@ BEGIN
       END IF;
 
       IF v_prod.stock < v_cantidad THEN
-        RAISE EXCEPTION 'Stock insuficiente de "%". Disponible: %.', v_prod.nombre, v_prod.stock;
+        RAISE EXCEPTION 'Stock insuficiente de "%". Disponible: %.', v_prod.nombre, trim_scale(v_prod.stock);
       END IF;
 
       UPDATE productos SET stock = stock - v_cantidad WHERE id = v_prod.id;

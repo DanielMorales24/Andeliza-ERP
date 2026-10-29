@@ -12,7 +12,7 @@ Stack: Node.js 20 + Express, EJS, PostgreSQL (Supabase), Tailwind y Alpine.js po
 |------|--------|--------|
 | 1 | Base, login, layout, dashboard | Hecha |
 | 2 | CRUDs: categorías, clientes, proveedores, productos (imagen, variantes, kits) y facturación interna | Hecha |
-| 3 | POS y facturación | Pendiente |
+| 3 | POS y facturación (PDF, cotización, historial) | Hecha |
 | 4 | Inventario visual, variantes | Pendiente |
 | 5 | Finanzas | Pendiente |
 | 6 | Estadísticas | Pendiente |
@@ -27,8 +27,9 @@ Stack: Node.js 20 + Express, EJS, PostgreSQL (Supabase), Tailwind y Alpine.js po
    (o `sql/seed_ferreteria_ejemplo.sql`, uno solo de los dos seeds).
    Si la base todavía tiene las tablas en inglés, en `schema_es.sql` borra las líneas `/*` y `*/`
    del bloque DROP del inicio para que las elimine antes de crear las nuevas.
-   Si la base ya tenía el esquema de la Fase 1 y no quieres borrarla: correr `sql/migracion_fase2.sql`
-   y después `sql/functions_es.sql` completo (se puede volver a correr sin problema).
+   Si la base ya tenía el esquema de una fase anterior y no quieres borrarla, correr en orden las migraciones
+   que falten (`sql/migracion_fase2.sql`, `sql/migracion_fase3.sql`) y después `sql/functions_es.sql` completo
+   (se puede volver a correr sin problema). Las migraciones se pueden repetir: no borran datos.
 3. Copiar `.env.example` a `.env` y llenar `DATABASE_URL`, `SESSION_SECRET`, `SUPABASE_URL` y
    `SUPABASE_KEY` (hacen falta para subir imágenes de productos).
 4. `npm install` y luego `npm run dev`. Abrir http://localhost:3000.
@@ -45,11 +46,17 @@ db.js                  Pool de pg y conversión de tipos
 middlewares/auth.js    requireAuth, soloRoles, requireFuncionalidad
 routes/ controllers/ models/   Un archivo por módulo
 controllers/entidad.js Fábrica de CRUD para listados con modal (categorías, clientes, proveedores)
+controllers/pos.js     POS: catálogo, alta rápida de cliente, cobro y cotización
+controllers/facturas.js, controllers/documentos.js   Historial, marcar pagada y armado de los PDF
+models/ventas.js       Cobro (crear_venta + clave anti-duplicado), cotización, historial con filtros
+models/pos.js, models/negocio.js   Catálogo del POS; datos del negocio y modo de facturación
+services/pdfService.js PDF en memoria con pdfkit (factura, comprobante interno, cotización)
+utils/totales.js       Cálculo de subtotal, impuesto y total en centavos (igual que Postgres)
 services/storageService.js  Subida y borrado de imágenes en Supabase Storage (solo servidor)
-public/js/             ui.js (utilidades), entidades.js, inventario.js, producto-form.js (Alpine)
+public/js/             ui.js (utilidades), entidades.js, inventario.js, producto-form.js, pos.js, facturas.js (Alpine)
 routes/modulos.js      Páginas "próximamente" de los módulos que aún no existen
 views/                 EJS: layouts, partials y una carpeta por módulo
-sql/                   schema_es, functions_es, migracion_fase2, seed_deportes y seed_ferreteria_ejemplo
+sql/                   schema_es, functions_es, migracion_fase2, migracion_fase3, seed_deportes y seed_ferreteria_ejemplo
 ```
 
 ## Facturación: modo SAR o modo interno
@@ -62,7 +69,8 @@ sql/                   schema_es, functions_es, migracion_fase2, seed_deportes y
   sin bloquear la venta. El prefijo y el contador viven en `configuracion_negocio`.
 
 Para un cliente sin SAR basta con no cargar la configuración fiscal (o dejarla inactiva:
-`UPDATE configuracion_fiscal SET activo = FALSE;`). El dashboard muestra en qué modo está.
+`UPDATE configuracion_fiscal SET activo = FALSE;`). El dashboard y el pie del carrito del POS muestran en qué modo está, y el POS
+avisa cuando quedan 5 números fiscales o menos.
 
 ## Imágenes de productos
 
@@ -70,6 +78,73 @@ Se guardan en Supabase Storage, en un bucket público llamado `productos` (se cr
 sube una imagen). La subida pasa por el servidor con `SUPABASE_KEY`: la llave nunca llega al navegador.
 El navegador reduce la foto a 1200 px (JPG) antes de enviarla, porque Vercel limita el cuerpo de una petición
 a unos 4.5 MB y el servidor rechaza imágenes de más de 4 MB.
+
+## Punto de venta (`/pos`)
+
+- **Escritorio**: catálogo a la izquierda (60 %) y carrito fijo a la derecha (40 %). **Celular y tablet**: catálogo a todo el
+  ancho, barra flotante «Ver carrito» con el total y el carrito sube como hoja desde abajo.
+- **Catálogo**: búsqueda en vivo por nombre o SKU (sin acentos ni mayúsculas), filtro por categoría, vista tarjetas o lista.
+  `/` enfoca el buscador. Con un lector de códigos, escribir un SKU exacto (de producto o de variante) y Enter lo agrega.
+- **Stock**: se valida en la pantalla contra lo que ya hay en el carrito. Un kit reserva el stock de sus componentes, así que
+  vender el kit y el componente suelto no puede pasarse del stock real. El servidor vuelve a validar al cobrar.
+- **Variantes**: el producto abre un modal para elegir talla/equipo (según `tiposVariante`) y cantidad. Las opciones sin stock
+  para lo ya elegido se ven atenuadas; al tocarlas se suelta la opción que no combina.
+- **Cliente**: buscador con autocompletado (nombre, teléfono o RTN). Sin cliente la venta sale a «Consumidor Final».
+  «Nuevo» abre un alta rápida sin perder la venta. El RTN es opcional.
+- **Cobrar**: el servidor recalcula precios y totales con lo que hay en la base (lo que mande el navegador se ignora) y llama a
+  `crear_venta`. La venta queda **pagada** salvo que se active «Dejar pendiente de pago».
+- **Cobros que no se duplican**: cada cobro lleva una clave. Si el mismo cobro se reintenta (doble toque, red lenta) se devuelve
+  la misma venta y el stock y el número de factura se usan una sola vez.
+- **Carrito guardado**: sobrevive a recargar la página (12 horas, por usuario). Al recuperarlo se ajusta a precios y stock actuales.
+- **Éxito**: indica si es factura fiscal (con CAI) o comprobante interno, con botones Imprimir PDF, Descargar y Nueva venta.
+
+## Facturas (`/facturas`, solo administrador)
+
+Historial con filtros en vivo: rango de fechas (en la hora del negocio), fiscal/interna, pagada/pendiente y búsqueda por cliente o
+número. Carga de 50 en 50. Cada factura se puede ver o descargar en PDF; las pendientes se pueden **marcar como pagadas**
+(no se puede deshacer desde la pantalla).
+
+## PDF
+
+`services/pdfService.js` genera el PDF en memoria (Buffer) y lo responde directo: nada se escribe en el disco, como pide Vercel.
+
+- **Fiscal**: muestra el CAI, el rango autorizado, la fecha límite de emisión y el pie legal. El CAI se toma del propio número
+  de factura, así que reimprimir una factura vieja conserva su CAI aunque después se cambie la configuración fiscal.
+- **Interno**: lleva la franja y el pie «COMPROBANTE INTERNO - No válido para crédito fiscal» y una marca de agua «NO FISCAL».
+- **Cotización**: no es documento fiscal, no consume stock ni números; vale 15 días (configurable).
+- El logo sale de `configuracion_negocio.logo_url` o, si está vacío, de `client.config.js`. Solo se admiten PNG y JPEG; si el
+  logo falla, el PDF se genera igual sin logo.
+- En Vercel, `vercel.json` incluye `node_modules/pdfkit/**` (pdfkit carga sus fuentes de una forma que el empaquetado no detecta).
+  Para comprobar el despliegue: `GET /salud?pdf=1`.
+
+## Endpoints de la Fase 3
+
+| Método y ruta | Quién | Qué hace |
+|---|---|---|
+| `GET /pos` | admin, vendedor | Pantalla del POS (catálogo, clientes, tasa y modo de facturación) |
+| `GET /pos/catalogo` | admin, vendedor | Catálogo con el stock actual (JSON) |
+| `POST /pos/clientes` | admin, vendedor | Alta rápida de cliente |
+| `POST /pos/cobrar` | admin, vendedor | Cobra. Cuerpo: `cliente_id`, `items` (`producto_id`, `variante_id`, `cantidad`), `pendiente`, `clave` |
+| `POST /pos/cotizacion` | admin, vendedor | PDF de cotización (campo de formulario `datos` con el carrito en JSON) |
+| `GET /facturas` | admin | Pantalla del historial |
+| `GET /facturas/datos` | admin | Historial en JSON: `desde`, `hasta`, `tipo`, `estado`, `q`, `offset` |
+| `PATCH /facturas/:id/pagada` | admin | Marca una factura como pagada |
+| `GET /facturas/:id/pdf[?descargar=1]` | admin (todas), vendedor (solo las suyas) | PDF de la venta |
+| `GET /salud[?pdf=1]` | público | Comprueba la base de datos (y la generación de PDF) |
+
+En `/facturas/datos`, si no se manda `desde` se usa el primer día del mes; mandarlo vacío (`desde=`) significa sin límite.
+Las rutas del POS responden 404 si `funcionalidades.pos` está en `false`; `/facturas` y su JSON, si `facturas` está en `false`.
+El PDF sirve con cualquiera de las dos funcionalidades activas.
+
+## Configuración opcional (`client.config.js` > `valoresPorDefecto`)
+
+Todas son opcionales: si no existen se usa el valor de la derecha.
+
+| Clave | Valor por defecto | Para qué sirve |
+|---|---|---|
+| `impuestoIncluidoEnPrecio` | `false` | `true` si los precios de venta ya incluyen el impuesto (se desglosa en lugar de sumarlo) |
+| `diasValidezCotizacion` | `15` | Días de vigencia que muestra la cotización |
+| `unidadesDecimales` | `kilo, libra, metro, yarda, litro, galon, onza` | Unidades que se pueden vender en fracciones; las demás van en enteros |
 
 ## Cómo crear un cliente nuevo
 

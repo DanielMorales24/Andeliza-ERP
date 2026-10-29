@@ -35,7 +35,9 @@
     try {
       respuesta = await fetch(url, pedido);
     } catch (e) {
-      throw new Error('No hay conexión con el servidor. Revisa tu internet e inténtalo de nuevo.');
+      const sinRed = new Error('No hay conexión con el servidor. Revisa tu internet e inténtalo de nuevo.');
+      sinRed.red = true; // para que el POS sepa que el resultado del cobro es incierto
+      throw sinRed;
     }
 
     let datos = null;

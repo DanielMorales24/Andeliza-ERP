@@ -53,11 +53,25 @@ app.use((req, res, next) => {
   next();
 });
 
-// Para comprobar el despliegue: GET /salud
+// Para comprobar el despliegue: GET /salud  (y GET /salud?pdf=1 también prueba la generación de PDF)
 app.get('/salud', async (req, res) => {
   try {
     await db.query('SELECT 1');
-    res.json({ ok: true, base_de_datos: 'conectada' });
+    const respuesta = { ok: true, base_de_datos: 'conectada' };
+    if (req.query.pdf === '1') {
+      try {
+        const buffer = await require('./services/pdfService').generar({
+          tipo: 'interno', negocio: { nombre: 'Prueba' }, logo: null, color: config.negocio.colores.primario, fecha: new Date(),
+          tasaPct: 0, numero: 'PRUEBA', estado: 'C', cliente: null, items: [], subtotal: 0, impuesto: 0, total: 0,
+        });
+        respuesta.pdf = `ok (${buffer.length} bytes)`;
+      } catch (err) {
+        console.error('[salud] el PDF falló:', err);
+        respuesta.pdf = 'error: ' + err.message;
+        respuesta.ok = false;
+      }
+    }
+    res.status(respuesta.ok ? 200 : 500).json(respuesta);
   } catch (err) {
     console.error('[salud] sin conexión a la base de datos:', err.message);
     res.status(500).json({ ok: false, base_de_datos: 'sin conexión' });
@@ -66,6 +80,8 @@ app.get('/salud', async (req, res) => {
 
 app.use('/', require('./routes/auth'));
 app.use('/', require('./routes/dashboard'));
+app.use('/pos', require('./routes/pos'));
+app.use('/facturas', require('./routes/facturas'));
 app.use('/inventario', require('./routes/inventario'));
 app.use('/categorias', require('./routes/categorias'));
 app.use('/clientes', require('./routes/clientes'));

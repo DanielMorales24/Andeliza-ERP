@@ -69,4 +69,4 @@ function normalizar(b) {
   };
 }
 
-module.exports = crearControlador({ modelo, descriptor, normalizar });
+module.exports = Object.assign(crearControlador({ modelo, descriptor, normalizar }), { normalizar });

@@ -31,6 +31,9 @@ function manejarErrores(enProduccion) {
     let mensaje = null;
     if (err instanceof ErrorValidacion) {
       estado = 422; mensaje = err.message;
+    } else if (err && err.code === 'P0001') {
+      // RAISE EXCEPTION de nuestras funciones SQL: el mensaje ya está escrito para la persona
+      estado = 422; mensaje = err.message;
     } else if (err && err.code === 'LIMIT_FILE_SIZE') {
       estado = 413; mensaje = 'La imagen pesa más de 4 MB.';
     } else if (err && err.name === 'MulterError') {

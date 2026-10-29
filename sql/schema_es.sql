@@ -148,6 +148,8 @@ CREATE TABLE componentes_producto (
 -- cliente_id puede ser NULL (consumidor final)
 -- tipo_documento: fiscal = número con CAI del SAR, interno = INT-000001
 --   (negocios sin SAR, o mientras no haya configuración fiscal activa)
+-- clave_cliente: identificador que manda el POS en cada cobro. Si el mismo cobro
+--   se reintenta (red lenta, doble toque) no se duplica la venta.
 -- ---------------------------------------------------------------------
 CREATE TABLE ventas (
   id              BIGSERIAL PRIMARY KEY,
@@ -160,8 +162,11 @@ CREATE TABLE ventas (
   numero_factura  VARCHAR(80) UNIQUE,
   tipo_documento  VARCHAR(10) NOT NULL DEFAULT 'fiscal'
                   CHECK (tipo_documento IN ('fiscal', 'interno')),
+  clave_cliente   VARCHAR(64),
   creado_en       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX uq_ventas_clave_cliente ON ventas (clave_cliente) WHERE clave_cliente IS NOT NULL;
 
 -- costo_unitario = costo del producto al momento de vender (para el margen real)
 -- variante_id es NULL cuando el producto no maneja variantes
@@ -302,6 +307,7 @@ CREATE INDEX idx_proveedores_correo    ON proveedores (correo);
 CREATE INDEX idx_ventas_creado_en      ON ventas (creado_en);
 CREATE INDEX idx_ventas_cliente        ON ventas (cliente_id);
 CREATE INDEX idx_ventas_estado         ON ventas (estado);
+CREATE INDEX idx_ventas_tipo           ON ventas (tipo_documento);
 CREATE INDEX idx_detalle_venta_venta   ON detalle_venta (venta_id);
 CREATE INDEX idx_detalle_venta_prod    ON detalle_venta (producto_id);
 

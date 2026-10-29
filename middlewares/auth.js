@@ -43,4 +43,13 @@ function requireFuncionalidad(clave) {
   };
 }
 
-module.exports = { requireAuth, soloRoles, requireFuncionalidad };
+// Pasa si al menos una de las funcionalidades está activa
+function requireAlgunaFuncionalidad(...claves) {
+  return (req, res, next) => {
+    if (claves.some((c) => config.funcionalidades[c] === true)) return next();
+    if (pideJSON(req)) return res.status(404).json({ error: 'Esta función no está activa.' });
+    res.status(404).render('errores/404', { layout: 'layouts/auth', titulo: 'No encontrada' });
+  };
+}
+
+module.exports = { requireAuth, soloRoles, requireFuncionalidad, requireAlgunaFuncionalidad };

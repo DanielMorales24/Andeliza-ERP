@@ -28,4 +28,29 @@ function fecha(valor) {
   return formatoFecha.replace('DD', dia).replace('MM', mes).replace('YYYY', anio);
 }
 
-module.exports = { dinero, fecha, aISO };
+// Fecha y hora en la zona del negocio: 29/10/2026 14:35
+function fechaHora(valor) {
+  const d = new Date(valor);
+  if (!valor || isNaN(d)) return '';
+  const p = {};
+  new Intl.DateTimeFormat('en-GB', {
+    timeZone: zonaHoraria, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d).forEach((x) => { p[x.type] = x.value; });
+  const hora = (p.hour === '24' ? '00' : p.hour) + ':' + p.minute;
+  return formatoFecha.replace('DD', p.day).replace('MM', p.month).replace('YYYY', p.year) + ' ' + hora;
+}
+
+// Suma (o resta) días a una fecha 'YYYY-MM-DD' sin depender de la zona horaria del servidor
+function sumarDias(iso, dias) {
+  const [a, m, d] = iso.split('-').map(Number);
+  const f = new Date(Date.UTC(a, m - 1, d + dias));
+  return f.toISOString().slice(0, 10);
+}
+
+const hoyISO = () => aISO(new Date());
+
+// Cantidades sin ceros de más: 2 -> "2", 1.5 -> "1.5"
+const cantidad = (n) => String(+(Number(n) || 0).toFixed(2));
+
+module.exports = { dinero, fecha, aISO, fechaHora, sumarDias, hoyISO, cantidad };

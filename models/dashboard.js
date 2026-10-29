@@ -1,4 +1,5 @@
 const db = require('../db');
+const Negocio = require('./negocio');
 
 // Inicio del día y del mes en la zona horaria del negocio ($1), no en UTC
 const INICIO_DIA = "date_trunc('day', NOW() AT TIME ZONE $1) AT TIME ZONE $1";
@@ -40,31 +41,8 @@ async function facturasPendientes() {
   return rows[0].total;
 }
 
-// Modo de facturación: SAR (hay CAI activo) o interno (sin CAI, números INT-000001)
-async function facturacion() {
-  try {
-    const { rows } = await db.query(
-      `SELECT cai, fecha_limite, rango_fin - numero_actual AS restantes,
-              (fecha_limite - CURRENT_DATE) AS dias
-         FROM configuracion_fiscal WHERE activo`
-    );
-    if (rows[0]) {
-      return { modo: 'sar', restantes: rows[0].restantes, fechaLimite: rows[0].fecha_limite, dias: rows[0].dias };
-    }
-    const interno = await db.query(
-      `SELECT prefijo_factura_interna || '-' || LPAD((numero_factura_interna + 1)::TEXT, 6, '0') AS siguiente
-         FROM configuracion_negocio WHERE id = 1`
-    );
-    return { modo: 'interno', siguiente: interno.rows[0] ? interno.rows[0].siguiente : null };
-  } catch (err) {
-    // Si falta correr migracion_fase2.sql, el resto del dashboard debe seguir funcionando
-    console.error('[dashboard] no se pudo leer el modo de facturación:', err.message);
-    return null;
-  }
-}
-
 async function resumen(zona) {
-  const [v, bajo, pendientes, fact] = await Promise.all([ventas(zona), stockBajo(), facturasPendientes(), facturacion()]);
+  const [v, bajo, pendientes, fact] = await Promise.all([ventas(zona), stockBajo(), facturasPendientes(), Negocio.modoFacturacion()]);
   return {
     facturacion: fact,
     ventasDia: v.ventas_dia,
