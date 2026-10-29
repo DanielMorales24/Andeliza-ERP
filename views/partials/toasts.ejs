@@ -1,0 +1,11 @@
+<div x-data class="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex flex-col items-center gap-2 px-4 sm:items-end sm:pr-6" aria-live="polite">
+  <template x-for="t in $store.toasts.items" :key="t.id">
+    <div x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-2 opacity-0"
+         class="pointer-events-auto flex max-w-sm items-start gap-3 rounded-md border bg-white px-4 py-3 text-sm shadow-lg"
+         :class="t.tipo === 'error' ? 'border-red-200' : 'border-borde'" role="status">
+      <span class="mt-1.5 h-2 w-2 flex-none rounded-full" :class="t.tipo === 'error' ? 'bg-red-500' : 'bg-emerald-500'"></span>
+      <p x-text="t.mensaje"></p>
+      <button type="button" @click="$store.toasts.quitar(t.id)" class="-mr-1 ml-1 text-gray-400 hover:text-gray-700" aria-label="Cerrar aviso">&times;</button>
+    </div>
+  </template>
+</div>

@@ -1,0 +1,33 @@
+<main class="grid min-h-screen lg:grid-cols-2">
+  <section class="flex flex-col justify-between bg-primario px-8 py-8 text-white lg:px-14 lg:py-14">
+    <img src="<%= config.negocio.logoUrl %>" alt="" class="h-12 w-12 rounded bg-white object-contain p-1" onerror="this.remove()">
+
+    <div class="py-10 lg:py-0">
+      <h1 class="font-titulo text-5xl font-bold leading-none sm:text-6xl lg:text-7xl"><%= config.negocio.nombre %></h1>
+      <p class="mt-4 max-w-sm text-white/80">Ventas, inventario y finanzas en un solo lugar.</p>
+    </div>
+
+    <div class="h-1.5 w-24 bg-acento"></div>
+  </section>
+
+  <section class="flex items-center justify-center px-6 py-12">
+    <form method="post" action="/login" class="w-full max-w-sm">
+      <h2 class="font-titulo text-3xl font-semibold">Iniciar sesión</h2>
+
+      <% if (error) { %>
+        <div role="alert" class="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"><%= error %></div>
+      <% } %>
+
+      <label for="usuario" class="mt-6 block text-sm font-medium">Usuario</label>
+      <input id="usuario" name="usuario" type="text" value="<%= usuario %>" required autofocus
+             autocomplete="username" autocapitalize="none" spellcheck="false"
+             class="mt-1 w-full rounded border border-borde bg-white px-3 py-2.5 focus:border-primario focus:outline-none focus:ring-2 focus:ring-primario/30">
+
+      <label for="contrasena" class="mt-4 block text-sm font-medium">Contraseña</label>
+      <input id="contrasena" name="contrasena" type="password" required autocomplete="current-password"
+             class="mt-1 w-full rounded border border-borde bg-white px-3 py-2.5 focus:border-primario focus:outline-none focus:ring-2 focus:ring-primario/30">
+
+      <button type="submit" class="mt-6 w-full rounded bg-primario px-4 py-2.5 font-semibold text-white hover:brightness-110">Entrar</button>
+    </form>
+  </section>
+</main>

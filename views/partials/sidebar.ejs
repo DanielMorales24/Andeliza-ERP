@@ -1,0 +1,22 @@
+<% const items = modulosVisibles(usuarioActual.rol); %>
+
+<div x-show="menu" x-cloak @click="menu = false" class="fixed inset-0 z-30 bg-black/40 lg:hidden"></div>
+
+<aside :class="menu ? 'translate-x-0' : '-translate-x-full'"
+       class="fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-primario text-white transition-transform duration-200 lg:translate-x-0">
+  <a href="<%= usuarioActual.rol === 'admin' ? '/' : '/pos' %>" class="flex items-center gap-3 px-5 py-5">
+    <img src="<%= config.negocio.logoUrl %>" alt="" class="h-9 w-9 rounded bg-white object-contain p-0.5" onerror="this.remove()">
+    <span class="font-titulo text-2xl font-semibold leading-none"><%= config.negocio.nombreCorto %></span>
+  </a>
+
+  <nav class="mt-2 flex-1 space-y-0.5 overflow-y-auto px-3 pb-6" aria-label="Menú principal">
+    <% items.forEach(function (m) {
+         const activo = m.ruta === '/' ? rutaActual === '/' : rutaActual.startsWith(m.ruta); %>
+      <a href="<%= m.ruta %>"
+         <% if (activo) { %>aria-current="page"<% } %>
+         class="block rounded border-l-[3px] px-3 py-2 text-[15px] font-medium <%= activo ? 'border-acento bg-white/15 text-white' : 'border-transparent text-white/75 hover:bg-white/10 hover:text-white' %>">
+        <%= m.nombre %>
+      </a>
+    <% }) %>
+  </nav>
+</aside>

@@ -1,0 +1,11 @@
+<main class="flex min-h-screen items-center justify-center px-6">
+  <div class="max-w-md text-center">
+    <p class="font-titulo text-7xl font-bold text-primario">500</p>
+    <h1 class="mt-2 font-titulo text-2xl font-semibold">Algo salió mal</h1>
+    <p class="mt-2 text-gray-600">El error quedó registrado. Intenta de nuevo y, si se repite, avisa a soporte.</p>
+    <% if (mensaje) { %>
+      <p class="mt-4 rounded border border-borde bg-white px-3 py-2 text-left text-sm text-gray-700 break-words"><%= mensaje %></p>
+    <% } %>
+    <a href="/" class="mt-6 inline-block rounded bg-primario px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110">Ir al inicio</a>
+  </div>
+</main>

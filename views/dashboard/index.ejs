@@ -1,0 +1,63 @@
+<%
+  const plural = (n, uno, varios) => n + ' ' + (n === 1 ? uno : varios);
+  const hay = (clave) => modulosVisibles(usuarioActual.rol).some((m) => m.clave === clave);
+
+  const tarjetas = [
+    { etiqueta: 'Ventas de hoy',       valor: dinero(resumen.ventasDia),       detalle: plural(resumen.cantidadDia, 'venta', 'ventas') },
+    { etiqueta: 'Ventas del mes',      valor: dinero(resumen.ventasMes),       detalle: plural(resumen.cantidadMes, 'venta', 'ventas') },
+    { etiqueta: 'Ticket promedio',     valor: dinero(resumen.ticketPromedio),  detalle: 'Este mes' },
+    { etiqueta: 'Stock bajo',          valor: resumen.stockBajo,               detalle: resumen.stockBajo === 1 ? 'artículo por reponer' : 'artículos por reponer', alerta: resumen.stockBajo > 0 },
+    { etiqueta: 'Facturas pendientes', valor: resumen.facturasPendientes,      detalle: 'Por cobrar' },
+  ];
+%>
+
+<p class="text-sm text-gray-600">Hoy es <%= fecha(new Date()) %>.</p>
+
+<% if (resumen.facturacion) {
+     const fa = resumen.facturacion;
+     const urgente = fa.modo === 'sar' && (fa.restantes <= 5 || fa.dias < 0 || fa.dias <= 30); %>
+  <div class="mt-4 rounded-md border px-4 py-3 text-sm <%= urgente ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-borde bg-white text-gray-700' %>">
+    <% if (fa.modo === 'interno') { %>
+      <span class="font-medium">Facturación interna.</span>
+      No hay una configuración fiscal activa, así que las ventas usan numeración propia<% if (fa.siguiente) { %>. La siguiente será <span class="font-medium tabular-nums"><%= fa.siguiente %></span><% } %>.
+    <% } else { %>
+      <span class="font-medium">Facturación con CAI.</span>
+      <% if (fa.dias < 0) { %>
+        La fecha límite de emisión venció el <%= fecha(fa.fechaLimite) %>. No se podrá facturar hasta registrar un nuevo CAI.
+      <% } else if (fa.restantes <= 0) { %>
+        Se agotó el rango de numeración. No se podrá facturar hasta registrar un nuevo rango.
+      <% } else { %>
+        Quedan <%= fa.restantes %> <%= fa.restantes === 1 ? 'número' : 'números' %> y vence el <%= fecha(fa.fechaLimite) %>.
+      <% } %>
+    <% } %>
+  </div>
+<% } %>
+
+<section class="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5" aria-label="Resumen">
+  <% tarjetas.forEach(function (t) { %>
+    <article class="rounded-md border border-borde bg-white p-4">
+      <p class="text-sm text-gray-600"><%= t.etiqueta %></p>
+      <p class="mt-1 font-titulo text-3xl font-semibold <%= t.alerta ? 'text-amber-700' : '' %>"><%= t.valor %></p>
+      <p class="mt-1 text-sm text-gray-500"><%= t.detalle %></p>
+    </article>
+  <% }) %>
+</section>
+
+<section class="mt-6 flex flex-wrap gap-3" aria-label="Accesos rápidos">
+  <% if (hay('pos')) { %>
+    <a href="/pos" class="rounded bg-primario px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110">Nueva venta</a>
+  <% } %>
+  <% if (hay('inventario')) { %>
+    <a href="/inventario" class="rounded border border-borde bg-white px-4 py-2.5 text-sm font-semibold hover:bg-fondo">Ver inventario</a>
+  <% } %>
+  <% if (hay('finanzas')) { %>
+    <a href="/finanzas" class="rounded border border-borde bg-white px-4 py-2.5 text-sm font-semibold hover:bg-fondo">Ver finanzas</a>
+  <% } %>
+</section>
+
+<section class="mt-6 rounded-md border border-borde bg-white p-4">
+  <h2 class="font-titulo text-lg font-semibold">Ventas de los últimos 30 días</h2>
+  <div class="mt-3 flex h-56 items-center justify-center rounded border border-dashed border-borde text-sm text-gray-500">
+    El gráfico se activa con la fase de estadísticas.
+  </div>
+</section>

@@ -1,0 +1,33 @@
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= titulo ? titulo + ' | ' : '' %><%= config.negocio.nombre %></title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  // Colores del cliente (client.config.js) disponibles como bg-primario, text-acento, etc.
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          primario: '<%= config.negocio.colores.primario %>',
+          acento: '<%= config.negocio.colores.acento %>',
+          fondo: '#f4f5f7',
+          tinta: '#1f2430',
+          borde: '#dfe2e8',
+        },
+        fontFamily: {
+          sans: ['Barlow', 'system-ui', 'sans-serif'],
+          titulo: ['"Barlow Condensed"', 'Barlow', 'sans-serif'],
+        },
+      },
+    },
+  };
+</script>
+<style>:root { --primario: <%= config.negocio.colores.primario %>; --acento: <%= config.negocio.colores.acento %>; --tinta: #1f2430; --borde: #dfe2e8; --fondo: #f4f5f7; }</style>
+<link rel="stylesheet" href="/css/app.css">
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<%- style %>

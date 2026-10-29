@@ -1,0 +1,145 @@
+<script type="application/json" id="datos-pagina"><%- JSON.stringify({ filas }).replace(/</g, '\\u003c') %></script>
+
+<div x-data="listadoProductos">
+
+  <!-- Barra de herramientas -->
+  <div class="flex flex-wrap items-center gap-3">
+    <div class="relative min-w-[220px] flex-1 sm:max-w-md">
+      <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" x-model="busqueda" placeholder="Buscar por nombre, SKU, categoría o proveedor" aria-label="Buscar productos" class="campo py-2.5 pl-9" autocomplete="off">
+    </div>
+
+    <select x-model="categoria" x-show="categorias.length > 0" x-cloak class="campo w-auto py-2.5" aria-label="Filtrar por categoría">
+      <option value="">Todas las categorías</option>
+      <template x-for="c in categorias" :key="c"><option :value="c" x-text="c"></option></template>
+    </select>
+
+    <div class="ml-auto flex items-center gap-2">
+      <div class="inline-flex rounded-md border border-borde bg-white p-0.5" role="group" aria-label="Tipo de vista">
+        <button type="button" @click="cambiarVista('lista')" :aria-pressed="vista === 'lista'"
+                class="rounded px-2.5 py-1.5 text-sm font-medium" :class="vista === 'lista' ? 'bg-primario text-white' : 'text-gray-600 hover:bg-fondo'">Lista</button>
+        <button type="button" @click="cambiarVista('tarjetas')" :aria-pressed="vista === 'tarjetas'"
+                class="rounded px-2.5 py-1.5 text-sm font-medium" :class="vista === 'tarjetas' ? 'bg-primario text-white' : 'text-gray-600 hover:bg-fondo'">Tarjetas</button>
+      </div>
+      <a href="/inventario/nuevo" class="btn btn-primario">Nuevo producto</a>
+    </div>
+  </div>
+
+  <!-- Filtros por estado del stock y resumen -->
+  <div class="mt-3 flex flex-wrap items-center gap-2 text-sm" x-show="filas.length > 0" x-cloak>
+    <button type="button" @click="estado = ''" class="rounded-full border px-3 py-1" :class="estado === '' ? 'border-primario bg-primario text-white' : 'border-borde bg-white hover:bg-fondo'">
+      Todos <span class="opacity-80" x-text="base.length"></span>
+    </button>
+    <button type="button" x-show="conteo('bajo') > 0 || estado === 'bajo'" @click="estado = (estado === 'bajo' ? '' : 'bajo')" class="rounded-full border px-3 py-1"
+            :class="estado === 'bajo' ? 'border-amber-600 bg-amber-600 text-white' : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'">
+      Stock bajo <span x-text="conteo('bajo')"></span>
+    </button>
+    <button type="button" x-show="conteo('agotado') > 0 || estado === 'agotado'" @click="estado = (estado === 'agotado' ? '' : 'agotado')" class="rounded-full border px-3 py-1"
+            :class="estado === 'agotado' ? 'border-red-600 bg-red-600 text-white' : 'border-red-200 bg-red-50 text-red-800 hover:bg-red-100'">
+      Agotados <span x-text="conteo('agotado')"></span>
+    </button>
+    <label class="ml-auto flex items-center gap-2 text-gray-600" x-show="hayInactivos">
+      <input type="checkbox" x-model="mostrarInactivos" class="h-4 w-4 rounded border-borde"> Mostrar inactivos
+    </label>
+  </div>
+
+  <!-- Sin productos todavía -->
+  <div x-show="filas.length === 0" x-cloak class="mt-6 rounded-md border border-dashed border-borde bg-white px-6 py-14 text-center">
+    <p class="font-titulo text-xl font-semibold">Todavía no tienes productos.</p>
+    <p class="mt-1 text-sm text-gray-600">Crea el primero para empezar a vender y controlar el stock.</p>
+    <a href="/inventario/nuevo" class="btn btn-primario mt-4">Crear el primer producto</a>
+  </div>
+
+  <!-- La búsqueda o el filtro no encuentra nada -->
+  <div x-show="filas.length > 0 && filtradas.length === 0" x-cloak class="mt-6 rounded-md border border-borde bg-white px-6 py-12 text-center">
+    <p class="font-medium">Sin resultados</p>
+    <p class="mt-1 text-sm text-gray-600">Prueba con otra búsqueda o quita los filtros.</p>
+  </div>
+
+  <!-- Vista lista -->
+  <div x-show="vista === 'lista' && filtradas.length > 0" x-cloak class="mt-4 overflow-x-auto rounded-md border border-borde bg-white">
+    <table class="min-w-full text-sm">
+      <thead class="border-b border-borde bg-fondo text-left text-xs font-semibold text-gray-600">
+        <tr>
+          <th scope="col" class="px-4 py-3 font-semibold">Producto</th>
+          <th scope="col" class="px-4 py-3 font-semibold">Categoría</th>
+          <th scope="col" class="px-4 py-3 text-right font-semibold">Precio</th>
+          <th scope="col" class="px-4 py-3 font-semibold">Stock</th>
+          <th scope="col" class="px-4 py-3"><span class="sr-only">Acciones</span></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-borde">
+        <template x-for="f in visibles" :key="f.id">
+          <tr class="hover:bg-fondo/60" :class="f.activo ? '' : 'opacity-60'">
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-3">
+                <img x-show="f.imagen_url" :src="f.imagen_url" loading="lazy" alt="" class="h-11 w-11 flex-none rounded-md border border-borde object-cover">
+                <div x-show="!f.imagen_url" class="flex h-11 w-11 flex-none items-center justify-center rounded-md bg-primario/10 font-titulo text-base font-semibold text-primario" x-text="iniciales(f.nombre)"></div>
+                <div class="min-w-0">
+                  <a :href="'/inventario/' + f.id + '/editar'" class="font-medium hover:text-primario" x-text="f.nombre"></a>
+                  <span class="insignia ins-marca ml-1" x-show="f.es_compuesto">Kit</span>
+                  <span class="insignia ins-neutra ml-1" x-show="!f.activo">Inactivo</span>
+                  <p class="text-xs text-gray-500" x-text="f.sku || 'Sin SKU'"></p>
+                </div>
+              </div>
+            </td>
+            <td class="px-4 py-3 text-gray-600" x-text="f.categoria || '—'"></td>
+            <td class="px-4 py-3 text-right tabular-nums" x-text="dinero(f.precio_venta)"></td>
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-2">
+                <span class="font-medium tabular-nums" x-text="cantidad(f.stock_mostrar)"></span>
+                <span class="text-xs text-gray-500" x-text="f.unidad"></span>
+                <span class="insignia" :class="claseEstado(f.estado_stock)"><i></i><span x-text="textoEstado(f.estado_stock)"></span></span>
+              </div>
+              <p class="mt-0.5 text-xs text-gray-500" x-text="f.detalle_stock"></p>
+            </td>
+            <td class="whitespace-nowrap px-4 py-3 text-right">
+              <a :href="'/inventario/' + f.id + '/editar'" class="btn-texto">Editar</a>
+              <button type="button" class="btn-texto apagar" @click="alternarActivo(f)" x-text="f.activo ? 'Desactivar' : 'Activar'"></button>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Vista tarjetas -->
+  <div x-show="vista === 'tarjetas' && filtradas.length > 0" x-cloak class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+    <template x-for="f in visibles" :key="f.id">
+      <article class="flex flex-col overflow-hidden rounded-md border border-borde bg-white transition hover:border-primario/40" :class="f.activo ? '' : 'opacity-60'">
+        <a :href="'/inventario/' + f.id + '/editar'" class="relative block aspect-[4/3] bg-primario/5" :aria-label="'Editar ' + f.nombre">
+          <img x-show="f.imagen_url" :src="f.imagen_url" loading="lazy" alt="" class="h-full w-full object-cover">
+          <div x-show="!f.imagen_url" class="flex h-full items-center justify-center font-titulo text-5xl font-semibold text-primario/35" x-text="iniciales(f.nombre)"></div>
+          <span class="insignia ins-marca absolute left-2 top-2 !bg-white" x-show="f.es_compuesto">Kit</span>
+          <span class="insignia ins-neutra absolute right-2 top-2 !bg-white" x-show="!f.activo">Inactivo</span>
+        </a>
+
+        <div class="flex flex-1 flex-col p-4">
+          <h3 class="line-clamp-2 font-medium leading-snug" x-text="f.nombre"></h3>
+          <p class="mt-0.5 truncate text-xs text-gray-500"><span x-text="f.sku || 'Sin SKU'"></span><span x-show="f.categoria"> &middot; <span x-text="f.categoria"></span></span></p>
+
+          <p class="mt-3 font-titulo text-2xl font-semibold tabular-nums" x-text="dinero(f.precio_venta)"></p>
+
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <span class="insignia" :class="claseEstado(f.estado_stock)"><i></i><span x-text="textoEstado(f.estado_stock)"></span></span>
+            <span class="text-sm tabular-nums"><span class="font-medium" x-text="cantidad(f.stock_mostrar)"></span> <span class="text-xs text-gray-500" x-text="f.unidad"></span></span>
+          </div>
+          <p class="mt-1 text-xs text-gray-500" x-text="f.detalle_stock"></p>
+
+          <div class="mt-auto flex justify-end gap-1 border-t border-borde pt-3 mt-4">
+            <a :href="'/inventario/' + f.id + '/editar'" class="btn-texto">Editar</a>
+            <button type="button" class="btn-texto apagar" @click="alternarActivo(f)" x-text="f.activo ? 'Desactivar' : 'Activar'"></button>
+          </div>
+        </div>
+      </article>
+    </template>
+  </div>
+
+  <div x-show="filtradas.length > limite" x-cloak class="mt-4 text-center">
+    <button type="button" class="btn btn-secundario" @click="limite += 60">
+      Mostrar más (<span x-text="filtradas.length - limite"></span> restantes)
+    </button>
+  </div>
+</div>
+
+<script src="/js/inventario.js"></script>

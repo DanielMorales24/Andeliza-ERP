@@ -1,0 +1,193 @@
+<script type="application/json" id="datos-pagina"><%- JSON.stringify({ descriptor, filas }).replace(/</g, '\\u003c') %></script>
+
+<div x-data="listadoEntidad" @keydown.escape.window="cerrarModal()">
+
+  <!-- Barra de herramientas -->
+  <div class="flex flex-wrap items-center gap-3">
+    <div class="relative min-w-[220px] flex-1 sm:max-w-md">
+      <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" x-model="busqueda" :placeholder="d.textos.buscar" aria-label="Buscar" class="campo py-2.5 pl-9" autocomplete="off">
+    </div>
+
+    <label class="flex items-center gap-2 text-sm text-gray-600" x-show="hayInactivos" x-cloak>
+      <input type="checkbox" x-model="mostrarInactivos" class="h-4 w-4 rounded border-borde"> Mostrar inactivos
+    </label>
+
+    <div class="ml-auto flex items-center gap-2">
+      <div x-show="d.vistas.length > 1" x-cloak class="inline-flex rounded-md border border-borde bg-white p-0.5" role="group" aria-label="Tipo de vista">
+        <button type="button" @click="cambiarVista('lista')" :aria-pressed="vista === 'lista'"
+                class="rounded px-2.5 py-1.5 text-sm font-medium" :class="vista === 'lista' ? 'bg-primario text-white' : 'text-gray-600 hover:bg-fondo'">Lista</button>
+        <button type="button" @click="cambiarVista('tarjetas')" :aria-pressed="vista === 'tarjetas'"
+                class="rounded px-2.5 py-1.5 text-sm font-medium" :class="vista === 'tarjetas' ? 'bg-primario text-white' : 'text-gray-600 hover:bg-fondo'">Tarjetas</button>
+      </div>
+      <button type="button" class="btn btn-primario" @click="abrirNuevo()" x-text="d.textos.nuevo"></button>
+    </div>
+  </div>
+
+  <!-- Sin registros todavía -->
+  <div x-show="filas.length === 0" x-cloak class="mt-6 rounded-md border border-dashed border-borde bg-white px-6 py-14 text-center">
+    <p class="font-titulo text-xl font-semibold" x-text="d.textos.vacio"></p>
+    <button type="button" class="btn btn-primario mt-4" @click="abrirNuevo()" x-text="d.textos.vacioAccion"></button>
+  </div>
+
+  <!-- Hay registros pero la búsqueda no encuentra nada -->
+  <div x-show="filas.length > 0 && filtradas.length === 0" x-cloak class="mt-6 rounded-md border border-borde bg-white px-6 py-12 text-center">
+    <p class="font-medium">Sin resultados</p>
+    <p class="mt-1 text-sm text-gray-600" x-show="busqueda.trim() !== ''">No hay nada que coincida con «<span x-text="busqueda.trim()"></span>».</p>
+    <p class="mt-1 text-sm text-gray-600" x-show="busqueda.trim() === '' && !mostrarInactivos">Todos los registros están inactivos. Activa «Mostrar inactivos» para verlos.</p>
+  </div>
+
+  <!-- Vista lista -->
+  <div x-show="vista === 'lista' && filtradas.length > 0" x-cloak class="mt-4 overflow-x-auto rounded-md border border-borde bg-white">
+    <table class="min-w-full text-sm">
+      <thead class="border-b border-borde bg-fondo text-left text-xs font-semibold text-gray-600">
+        <tr>
+          <template x-for="col in d.columnas" :key="col.campo">
+            <th scope="col" class="px-4 py-3 font-semibold" :class="col.alinear === 'der' ? 'text-right' : ''" x-text="col.etiqueta"></th>
+          </template>
+          <th scope="col" class="px-4 py-3"><span class="sr-only">Acciones</span></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-borde">
+        <template x-for="f in visibles" :key="f.id">
+          <tr class="hover:bg-fondo/60" :class="f.activo ? '' : 'opacity-60'">
+            <template x-for="col in d.columnas" :key="col.campo">
+              <td class="px-4 py-3" :class="col.alinear === 'der' ? 'text-right tabular-nums' : ''">
+                <template x-if="col.insignia">
+                  <span class="insignia ins-neutra" x-text="valor(f, col)"></span>
+                </template>
+                <template x-if="!col.insignia">
+                  <span :class="[col.principal ? 'font-medium' : '', (col.tenue || vacio(f, col)) ? 'text-gray-500' : '']" x-text="valor(f, col)"></span>
+                </template>
+                <template x-if="col.principal && !f.activo">
+                  <span class="insignia ins-neutra ml-2">Inactivo</span>
+                </template>
+              </td>
+            </template>
+            <td class="whitespace-nowrap px-4 py-3 text-right">
+              <button type="button" class="btn-texto" @click="abrirEditar(f)">Editar</button>
+              <button type="button" class="btn-texto apagar" @click="alternarActivo(f)" x-text="f.activo ? 'Desactivar' : 'Activar'"></button>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Vista tarjetas -->
+  <div x-show="vista === 'tarjetas' && filtradas.length > 0" x-cloak class="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <template x-for="f in visibles" :key="f.id">
+      <article class="flex flex-col rounded-md border border-borde bg-white p-4 transition hover:border-primario/40" :class="f.activo ? '' : 'opacity-60'">
+        <header class="flex items-start gap-3">
+          <div class="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-primario/10 font-titulo text-lg font-semibold text-primario" x-text="iniciales(f[d.tarjeta.titulo])"></div>
+          <div class="min-w-0 flex-1">
+            <h3 class="truncate font-medium" x-text="f[d.tarjeta.titulo]"></h3>
+            <div class="mt-1 flex flex-wrap gap-1.5">
+              <span class="insignia ins-neutra" x-show="d.tarjeta.insignia" x-text="d.tarjeta.insignia ? valor(f, { campo: d.tarjeta.insignia }) : ''"></span>
+              <span class="insignia ins-neutra" x-show="!f.activo">Inactivo</span>
+            </div>
+          </div>
+        </header>
+
+        <dl class="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+          <template x-for="linea in d.tarjeta.lineas" :key="linea.campo">
+            <template x-if="!vacio(f, linea) || linea.vacio">
+              <div class="contents">
+                <dt class="text-gray-500" x-text="linea.etiqueta"></dt>
+                <dd class="min-w-0 truncate" :class="vacio(f, linea) ? 'text-gray-400' : ''" x-text="valor(f, linea)"></dd>
+              </div>
+            </template>
+          </template>
+        </dl>
+
+        <footer class="mt-auto flex justify-end gap-1 border-t border-borde pt-3 mt-4">
+          <button type="button" class="btn-texto" @click="abrirEditar(f)">Editar</button>
+          <button type="button" class="btn-texto apagar" @click="alternarActivo(f)" x-text="f.activo ? 'Desactivar' : 'Activar'"></button>
+        </footer>
+      </article>
+    </template>
+  </div>
+
+  <!-- Mostrar más (se dibujan de a 60 para que todo siga fluido) -->
+  <div x-show="filtradas.length > limite" x-cloak class="mt-4 text-center">
+    <button type="button" class="btn btn-secundario" @click="limite += 60">
+      Mostrar más (<span x-text="filtradas.length - limite"></span> restantes)
+    </button>
+  </div>
+
+  <!-- Modal crear / editar -->
+  <div x-show="modal" x-cloak class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" :aria-label="editando ? d.textos.editar : d.textos.nuevo">
+    <div x-show="modal" class="absolute inset-0 bg-tinta/50"
+         x-transition:enter="transition-opacity duration-150" x-transition:enter-start="opacity-0"
+         x-transition:leave="transition-opacity duration-100" x-transition:leave-end="opacity-0"
+         @click="cerrarModal()"></div>
+
+    <form x-show="modal" @submit.prevent="guardar()" novalidate
+          x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-6 opacity-0 sm:translate-y-2 sm:scale-95"
+          x-transition:leave="transition duration-100 ease-in" x-transition:leave-end="translate-y-4 opacity-0 sm:scale-95"
+          class="relative flex max-h-[92vh] w-full max-w-xl flex-col rounded-t-xl bg-white shadow-xl sm:rounded-lg">
+
+      <header class="flex items-center justify-between border-b border-borde px-5 py-4">
+        <h2 class="font-titulo text-xl font-semibold" x-text="editando ? d.textos.editar : d.textos.nuevo"></h2>
+        <button type="button" @click="cerrarModal()" class="-mr-2 rounded p-2 text-gray-500 hover:bg-fondo hover:text-gray-800" aria-label="Cerrar">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </header>
+
+      <div class="overflow-y-auto px-5 py-5">
+        <div x-show="error" x-cloak role="alert" class="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="error"></div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <template x-for="campo in d.campos" :key="campo.nombre">
+            <div x-show="!(campo.soloEditar && !editando)" :class="campo.ancho === 'completo' ? 'sm:col-span-2' : ''">
+
+              <template x-if="campo.tipo === 'interruptor'">
+                <label class="flex cursor-pointer items-start gap-3">
+                  <input type="checkbox" class="interruptor mt-0.5" x-model="form[campo.nombre]" :id="'campo-' + campo.nombre">
+                  <span>
+                    <span class="block text-sm font-medium" x-text="campo.etiqueta"></span>
+                    <span class="ayuda block" x-show="campo.ayuda" x-text="campo.ayuda"></span>
+                  </span>
+                </label>
+              </template>
+
+              <template x-if="campo.tipo !== 'interruptor'">
+                <div>
+                  <label class="etiqueta" :for="'campo-' + campo.nombre">
+                    <span x-text="campo.etiqueta"></span><span class="text-red-600" x-show="campo.requerido" aria-hidden="true"> *</span>
+                  </label>
+
+                  <template x-if="campo.tipo === 'seleccion'">
+                    <select class="campo" :id="'campo-' + campo.nombre" x-model="form[campo.nombre]">
+                      <template x-for="o in campo.opciones" :key="o.valor"><option :value="o.valor" x-text="o.etiqueta"></option></template>
+                    </select>
+                  </template>
+
+                  <template x-if="campo.tipo === 'area'">
+                    <textarea class="campo" rows="2" :id="'campo-' + campo.nombre" x-model="form[campo.nombre]" :maxlength="campo.max"></textarea>
+                  </template>
+
+                  <template x-if="['texto', 'telefono', 'correo'].includes(campo.tipo)">
+                    <input class="campo" :id="'campo-' + campo.nombre" x-model="form[campo.nombre]" :maxlength="campo.max"
+                           :type="campo.tipo === 'correo' ? 'email' : campo.tipo === 'telefono' ? 'tel' : 'text'"
+                           :inputmode="campo.modo || (campo.tipo === 'telefono' ? 'tel' : campo.tipo === 'correo' ? 'email' : 'text')"
+                           :required="campo.requerido" autocomplete="off">
+                  </template>
+
+                  <p class="ayuda" x-show="campo.ayuda" x-text="campo.ayuda"></p>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <footer class="flex justify-end gap-2 border-t border-borde bg-fondo/60 px-5 py-3 sm:rounded-b-lg">
+        <button type="button" class="btn btn-secundario" @click="cerrarModal()" :disabled="guardando">Cancelar</button>
+        <button type="submit" class="btn btn-primario" :disabled="guardando" x-text="guardando ? 'Guardando…' : 'Guardar'"></button>
+      </footer>
+    </form>
+  </div>
+</div>
+
+<script src="/js/entidades.js"></script>

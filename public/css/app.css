@@ -1,0 +1,70 @@
+[x-cloak] { display: none !important; }
+
+/* Foco visible para quien navega con teclado */
+:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+
+/* Evita que iOS haga zoom al tocar un campo */
+input, select, textarea { font-size: 16px; }
+@media (min-width: 640px) { input, select, textarea { font-size: 15px; } }
+
+/* ---------- Componentes compartidos (usan los colores del cliente) ---------- */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  border-radius: .375rem; padding: .625rem 1rem; font-size: .875rem; font-weight: 600; line-height: 1.25rem;
+  cursor: pointer; transition: filter .15s, background-color .15s, border-color .15s; white-space: nowrap;
+}
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn-primario { background: var(--primario); color: #fff; border: 1px solid var(--primario); }
+.btn-primario:hover:not(:disabled) { filter: brightness(1.12); }
+.btn-secundario { background: #fff; color: var(--tinta); border: 1px solid var(--borde); }
+.btn-secundario:hover:not(:disabled) { background: var(--fondo); }
+.btn-texto {
+  display: inline-flex; align-items: center; gap: .25rem; padding: .25rem .5rem; border-radius: .25rem;
+  font-size: .8125rem; font-weight: 500; color: var(--primario); cursor: pointer; transition: background-color .15s;
+}
+.btn-texto:hover { background: color-mix(in srgb, var(--primario) 9%, transparent); }
+.btn-texto.apagar { color: #6b7280; }
+.btn-texto.apagar:hover { background: #f3f4f6; color: #374151; }
+.btn-texto.peligro { color: #b91c1c; }
+.btn-texto.peligro:hover { background: #fef2f2; }
+
+.campo {
+  width: 100%; border: 1px solid var(--borde); border-radius: .375rem; background: #fff;
+  padding: .5rem .75rem; color: var(--tinta); transition: border-color .15s, box-shadow .15s;
+}
+.campo::placeholder { color: #9ca3af; }
+.campo:focus { outline: none; border-color: var(--primario); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primario) 22%, transparent); }
+.campo:disabled { background: var(--fondo); color: #6b7280; }
+textarea.campo { resize: vertical; min-height: 4.5rem; }
+.etiqueta { display: block; margin-bottom: .25rem; font-size: .875rem; font-weight: 500; }
+.ayuda { margin-top: .25rem; font-size: .75rem; color: #6b7280; }
+
+.insignia {
+  display: inline-flex; align-items: center; gap: .375rem; border-radius: 9999px;
+  padding: .125rem .625rem; font-size: .75rem; font-weight: 500; line-height: 1.25rem; white-space: nowrap;
+}
+.insignia i { display: inline-block; width: .4rem; height: .4rem; border-radius: 9999px; background: currentColor; }
+.ins-neutra { background: #f3f4f6; color: #4b5563; }
+.ins-marca { background: color-mix(in srgb, var(--primario) 10%, #fff); color: var(--primario); }
+.ins-ok { background: #ecfdf5; color: #047857; }
+.ins-bajo { background: #fffbeb; color: #b45309; }
+.ins-agotado { background: #fef2f2; color: #b91c1c; }
+
+/* Interruptor (switch) sobre un checkbox */
+input.interruptor {
+  appearance: none; -webkit-appearance: none; position: relative; flex: none; cursor: pointer;
+  width: 2.5rem; height: 1.5rem; border-radius: 9999px; background: #cbd5e1; transition: background-color .15s;
+}
+input.interruptor::after {
+  content: ''; position: absolute; top: .1875rem; left: .1875rem; width: 1.125rem; height: 1.125rem;
+  border-radius: 9999px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s;
+}
+input.interruptor:checked { background: var(--primario); }
+input.interruptor:checked::after { transform: translateX(1rem); }
+input.interruptor:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Lo que se anima responde a una acción de la persona; se respeta "reducir movimiento" */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}

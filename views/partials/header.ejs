@@ -1,0 +1,15 @@
+<header class="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-borde bg-white px-4 sm:px-6">
+  <button type="button" @click="menu = true" class="-ml-2 rounded p-2 hover:bg-fondo lg:hidden" aria-label="Abrir menú">
+    <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+
+  <h1 class="font-titulo text-xl font-semibold"><%= titulo %></h1>
+
+  <div class="ml-auto flex items-center gap-3">
+    <span class="hidden text-sm font-medium sm:inline"><%= usuarioActual.nombre %></span>
+    <span class="hidden rounded bg-fondo px-2 py-0.5 text-xs text-gray-600 sm:inline"><%= usuarioActual.rol %></span>
+    <form method="post" action="/logout">
+      <button type="submit" class="rounded border border-borde px-3 py-1.5 text-sm font-medium hover:bg-fondo">Salir</button>
+    </form>
+  </div>
+</header>
