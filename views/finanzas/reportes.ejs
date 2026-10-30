@@ -1,0 +1,65 @@
+<script type="application/json" id="datos-pagina"><%- JSON.stringify(datos).replace(/</g, '\\u003c') %></script>
+<%- include('../partials/finanzas_tabs', { seccion }) %>
+
+<div x-data="{
+  d: JSON.parse(document.getElementById('datos-pagina').textContent),
+  desde: '', hasta: '', fecha: '', tipo: 'ambos',
+  init() { this.desde = this.d.inicioMes; this.hasta = this.d.estado.hoy; this.fecha = this.d.estado.hoy; },
+  get periodoValido() { return !this.desde || !this.hasta || this.desde <= this.hasta; },
+  enlace(base, extra) { return base + '?' + new URLSearchParams(extra).toString(); },
+}">
+
+  <p class="text-sm text-gray-600">Reportes contables en PDF, calculados con el libro diario. Se abren en otra pestaña y se pueden imprimir o descargar.</p>
+  <p x-show="!d.estado.iniciada" x-cloak class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">La contabilidad todavía no ha empezado: los reportes saldrán vacíos. <a href="/finanzas" class="font-medium underline">Inícialas desde el Resumen</a>.</p>
+
+  <div class="mt-4 grid gap-4 lg:grid-cols-2">
+
+    <article class="flex flex-col rounded-md border border-borde bg-white p-5">
+      <h2 class="font-titulo text-xl font-semibold">Estado de resultados</h2>
+      <p class="mt-1 text-sm text-gray-600">Ingresos − costo de ventas − gastos = utilidad del período.</p>
+      <div class="mt-4 flex flex-wrap items-end gap-3">
+        <div><label class="etiqueta text-xs" for="r1-desde">Desde</label><input id="r1-desde" type="date" class="campo h-11 w-[9.5rem] py-1.5" x-model="desde"></div>
+        <div><label class="etiqueta text-xs" for="r1-hasta">Hasta</label><input id="r1-hasta" type="date" class="campo h-11 w-[9.5rem] py-1.5" x-model="hasta"></div>
+      </div>
+      <p class="mt-2 text-sm text-red-700" x-show="!periodoValido" x-cloak role="alert">La fecha inicial no puede ser mayor que la final.</p>
+      <div class="mt-auto flex gap-2 pt-4">
+        <a :href="enlace('/finanzas/reportes/estado-resultados.pdf', { desde, hasta })" target="_blank" rel="noopener" class="btn btn-primario h-11 flex-1" :class="periodoValido ? '' : 'pointer-events-none opacity-50'">Ver PDF</a>
+        <a :href="enlace('/finanzas/reportes/estado-resultados.pdf', { desde, hasta, descargar: 1 })" class="btn btn-secundario h-11" :class="periodoValido ? '' : 'pointer-events-none opacity-50'">Descargar</a>
+      </div>
+    </article>
+
+    <article class="flex flex-col rounded-md border border-borde bg-white p-5">
+      <h2 class="font-titulo text-xl font-semibold">Flujo de caja</h2>
+      <p class="mt-1 text-sm text-gray-600">El dinero real que entró y salió de Caja y Bancos en el período.</p>
+      <div class="mt-4 flex flex-wrap items-end gap-3">
+        <div><label class="etiqueta text-xs" for="r2-desde">Desde</label><input id="r2-desde" type="date" class="campo h-11 w-[9.5rem] py-1.5" x-model="desde"></div>
+        <div><label class="etiqueta text-xs" for="r2-hasta">Hasta</label><input id="r2-hasta" type="date" class="campo h-11 w-[9.5rem] py-1.5" x-model="hasta"></div>
+      </div>
+      <div class="mt-auto flex gap-2 pt-4">
+        <a :href="enlace('/finanzas/reportes/flujo-caja.pdf', { desde, hasta })" target="_blank" rel="noopener" class="btn btn-primario h-11 flex-1" :class="periodoValido ? '' : 'pointer-events-none opacity-50'">Ver PDF</a>
+        <a :href="enlace('/finanzas/reportes/flujo-caja.pdf', { desde, hasta, descargar: 1 })" class="btn btn-secundario h-11" :class="periodoValido ? '' : 'pointer-events-none opacity-50'">Descargar</a>
+      </div>
+    </article>
+
+    <article class="flex flex-col rounded-md border border-borde bg-white p-5">
+      <h2 class="font-titulo text-xl font-semibold">Balance general</h2>
+      <p class="mt-1 text-sm text-gray-600">Activos (caja, cuentas por cobrar, inventario) = pasivos + patrimonio, a una fecha.</p>
+      <div class="mt-4"><label class="etiqueta text-xs" for="r3-fecha">Al día</label><input id="r3-fecha" type="date" class="campo h-11 w-[9.5rem] py-1.5" x-model="fecha"></div>
+      <div class="mt-auto flex gap-2 pt-4">
+        <a :href="enlace('/finanzas/reportes/balance-general.pdf', { fecha })" target="_blank" rel="noopener" class="btn btn-primario h-11 flex-1">Ver PDF</a>
+        <a :href="enlace('/finanzas/reportes/balance-general.pdf', { fecha, descargar: 1 })" class="btn btn-secundario h-11">Descargar</a>
+      </div>
+    </article>
+
+    <article class="flex flex-col rounded-md border border-borde bg-white p-5">
+      <h2 class="font-titulo text-xl font-semibold">Antigüedad de saldos</h2>
+      <p class="mt-1 text-sm text-gray-600">Lo que nos deben y lo que debemos, según los días de atraso. Siempre al día de hoy.</p>
+      <div class="mt-4"><label class="etiqueta text-xs" for="r4-tipo">Incluir</label>
+        <select id="r4-tipo" class="campo h-11 sm:w-64" x-model="tipo"><option value="ambos">Por cobrar y por pagar</option><option value="cxc">Solo por cobrar</option><option value="cxp">Solo por pagar</option></select></div>
+      <div class="mt-auto flex gap-2 pt-4">
+        <a :href="enlace('/finanzas/reportes/antiguedad-saldos.pdf', { tipo })" target="_blank" rel="noopener" class="btn btn-primario h-11 flex-1">Ver PDF</a>
+        <a :href="enlace('/finanzas/reportes/antiguedad-saldos.pdf', { tipo, descargar: 1 })" class="btn btn-secundario h-11">Descargar</a>
+      </div>
+    </article>
+  </div>
+</div>

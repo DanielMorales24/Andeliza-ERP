@@ -80,6 +80,7 @@ app.get('/salud', async (req, res) => {
 
 app.use('/', require('./routes/auth'));
 app.use('/', require('./routes/dashboard'));
+app.use('/finanzas', require('./routes/finanzas'));
 app.use('/pos', require('./routes/pos'));
 app.use('/facturas', require('./routes/facturas'));
 app.use('/inventario', require('./routes/inventario'));

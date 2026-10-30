@@ -10,6 +10,17 @@
     return window.APP.moneda + ' ' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
+  // 2026-10-29 -> 29/10/2026 (según el formato de fecha del negocio)
+  window.fechaTexto = function (iso) {
+    if (!iso) return '';
+    const p = String(iso).slice(0, 10).split('-');
+    if (p.length !== 3) return iso;
+    return (window.APP.formatoFecha || 'DD/MM/YYYY').replace('DD', p[2]).replace('MM', p[1]).replace('YYYY', p[0]);
+  };
+
+  // Verde si es positivo (entra), rojo si es negativo (sale)
+  window.colorMonto = function (n) { n = Number(n) || 0; return n > 0 ? 'text-emerald-700' : n < 0 ? 'text-red-700' : 'text-gray-500'; };
+
   // 45.5 -> "45.5", 18 -> "18" (sin ceros de sobra)
   window.cantidad = function (n) {
     return String(+(Number(n) || 0).toFixed(2));

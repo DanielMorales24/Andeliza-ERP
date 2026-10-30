@@ -114,14 +114,3 @@ CROSS JOIN (VALUES ('S', 1), ('M', 2), ('L', 3), ('XL', 4)) AS t(talla, orden);
 -- Para probar alertas de stock: una variante con stock bajo y otra agotada
 UPDATE variantes_producto SET stock = 1 WHERE sku = 'CAM-RMA-LOC-S';
 UPDATE variantes_producto SET stock = 0 WHERE sku = 'CAM-OLI-LOC-XL';
-
--- Algo de movimiento para probar finanzas
-INSERT INTO ingresos (tipo, descripcion, monto, fecha, notas) VALUES
-  ('alquileres', 'Alquiler de local pequeño',     4500, CURRENT_DATE - 12, 'Mes actual'),
-  ('servicios',  'Estampado de nombres y números', 850, CURRENT_DATE - 5,  '');
-
-INSERT INTO gastos (categoria, descripcion, monto, fecha, notas) VALUES
-  ('logistica',     'Flete de mercadería',   1200, CURRENT_DATE - 10, ''),
-  ('operativos',    'Energía eléctrica',     2300, CURRENT_DATE - 7,  ''),
-  ('marketing',     'Publicidad en redes',    900, CURRENT_DATE - 4,  ''),
-  ('mantenimiento', 'Reparación de vitrina',  650, CURRENT_DATE - 3,  '');

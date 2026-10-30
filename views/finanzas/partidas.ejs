@@ -1,0 +1,137 @@
+<script type="application/json" id="datos-pagina"><%- JSON.stringify(datos).replace(/</g, '\\u003c') %></script>
+<%- include('../partials/finanzas_tabs', { seccion }) %>
+
+<div x-data="partidas" @keydown.escape.window="cerrar()">
+
+  <div class="flex flex-wrap items-center gap-3">
+    <div class="inline-flex rounded-md border border-borde bg-white p-0.5" role="tablist" aria-label="Vista">
+      <button type="button" role="tab" :aria-selected="vista === 'libro'" @click="vista = 'libro'" class="rounded px-4 py-2 text-sm font-medium" :class="vista === 'libro' ? 'bg-primario text-white' : 'text-gray-600 hover:bg-fondo'">Libro diario</button>
+      <button type="button" role="tab" :aria-selected="vista === 'balanza'" @click="abrirBalanza()" class="rounded px-4 py-2 text-sm font-medium" :class="vista === 'balanza' ? 'bg-primario text-white' : 'text-gray-600 hover:bg-fondo'">Balanza y plan de cuentas</button>
+    </div>
+    <button type="button" class="btn btn-primario ml-auto" @click="abrirAsiento()" x-show="d.estado.iniciada">Asiento manual</button>
+  </div>
+
+  <p x-show="!d.estado.iniciada" x-cloak class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">La contabilidad todavía no ha empezado. <a href="/finanzas" class="font-medium underline">Inícialas desde el Resumen</a>.</p>
+
+  <!-- ================= LIBRO DIARIO ================= -->
+  <section x-show="vista === 'libro'" aria-label="Libro diario">
+    <div class="mt-3 flex flex-wrap items-end gap-3">
+      <div class="relative min-w-[200px] flex-1 sm:max-w-xs">
+        <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" x-model="f.q" placeholder="Descripción o número" aria-label="Buscar partida" class="campo h-11 pl-9" autocomplete="off">
+      </div>
+      <div><label class="etiqueta text-xs" for="p-desde">Desde</label><input id="p-desde" type="date" class="campo h-11 w-[9.5rem] py-1.5" x-model="f.desde"></div>
+      <div><label class="etiqueta text-xs" for="p-hasta">Hasta</label><input id="p-hasta" type="date" class="campo h-11 w-[9.5rem] py-1.5" x-model="f.hasta"></div>
+      <select x-model="f.cuenta" class="campo h-11 w-auto max-w-[14rem]" aria-label="Cuenta"><option value="">Todas las cuentas</option><template x-for="c in d.cuentas" :key="c.id"><option :value="c.id" x-text="c.codigo + '  ' + c.nombre"></option></template></select>
+      <select x-model="f.origen" class="campo h-11 w-auto" aria-label="Origen"><option value="">Todos los orígenes</option><template x-for="(nombre, clave) in d.origenes" :key="clave"><option :value="clave" x-text="nombre"></option></template></select>
+      <select x-model="f.orden" class="campo h-11 w-auto" aria-label="Orden"><option value="desc">Más recientes primero</option><option value="asc">Cronológico (más antiguas primero)</option></select>
+    </div>
+    <p class="mt-2 text-sm text-red-700" x-show="error && !modal" x-cloak role="alert" x-text="error"></p>
+    <p class="mt-3 text-sm text-gray-600" aria-live="polite"><span class="font-medium text-tinta tabular-nums" x-text="libro.cantidad"></span> <span x-text="libro.cantidad === 1 ? 'partida' : 'partidas'"></span><span x-show="cargando"> · actualizando…</span></p>
+
+    <div x-show="libro.partidas.length === 0 && !cargando" x-cloak class="mt-4 rounded-md border border-dashed border-borde bg-white px-6 py-14 text-center"><p class="font-titulo text-xl font-semibold">No hay partidas con estos filtros</p></div>
+
+    <div class="mt-3 space-y-3">
+      <template x-for="p in libro.partidas" :key="p.id">
+        <article class="overflow-hidden rounded-md border border-borde bg-white" :class="p.anulada ? 'opacity-70' : ''">
+          <header class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-borde bg-fondo/70 px-4 py-2">
+            <span class="font-medium tabular-nums" x-text="p.numero"></span>
+            <span class="text-sm tabular-nums text-gray-600" x-text="fechaTexto(p.fecha)"></span>
+            <span class="insignia ins-neutra" x-text="d.origenes[p.origen_tipo] || p.origen_tipo"></span>
+            <span class="insignia ins-agotado" x-show="p.anulada">Anulada</span>
+            <span class="insignia ins-marca" x-show="p.reversa_de">Contrapartida</span>
+            <button type="button" class="btn-texto peligro ml-auto" x-show="puedeAnular(p)" @click="anulando = { p: p, motivo: '', error: '', guardando: false }">Anular</button>
+          </header>
+          <p class="px-4 pt-2 text-sm" :class="p.anulada ? 'line-through' : ''" x-text="p.descripcion"></p>
+          <table class="mt-1 min-w-full text-[13px]">
+            <thead class="text-left text-xs text-gray-500"><tr><th class="px-4 py-1 font-medium">Cuenta</th><th class="w-28 px-4 py-1 text-right font-medium">Debe</th><th class="w-28 px-4 py-1 text-right font-medium">Haber</th></tr></thead>
+            <tbody>
+              <template x-for="(l, i) in p.lineas" :key="i">
+                <tr class="border-t border-borde/60">
+                  <td class="px-4 py-1.5" :class="l.haber > 0 ? 'pl-10' : ''"><span class="tabular-nums text-gray-500" x-text="l.codigo"></span> <span x-text="l.nombre"></span><span class="block text-xs text-gray-400" x-show="l.detalle" x-text="l.detalle"></span></td>
+                  <td class="px-4 py-1.5 text-right tabular-nums" x-text="l.debe > 0 ? dinero(l.debe) : ''"></td>
+                  <td class="px-4 py-1.5 text-right tabular-nums" x-text="l.haber > 0 ? dinero(l.haber) : ''"></td>
+                </tr>
+              </template>
+              <tr class="border-t border-borde bg-fondo/40 text-xs font-semibold"><td class="px-4 py-1.5 text-gray-600">Sumas iguales</td><td class="px-4 py-1.5 text-right tabular-nums" x-text="dinero(p.total)"></td><td class="px-4 py-1.5 text-right tabular-nums" x-text="dinero(p.total)"></td></tr>
+            </tbody>
+          </table>
+        </article>
+      </template>
+    </div>
+    <div class="mt-4 text-center" x-show="libro.hayMas" x-cloak><button type="button" class="btn btn-secundario" :disabled="cargando" @click="cargar(false)">Cargar más</button></div>
+  </section>
+
+  <!-- ================= BALANZA ================= -->
+  <section x-show="vista === 'balanza'" x-cloak aria-label="Balanza de comprobación">
+    <div class="mt-3 flex flex-wrap items-end gap-3">
+      <div><label class="etiqueta text-xs" for="b-desde">Desde</label><input id="b-desde" type="date" class="campo h-11 w-[9.5rem] py-1.5" x-model="fb.desde"></div>
+      <div><label class="etiqueta text-xs" for="b-hasta">Hasta</label><input id="b-hasta" type="date" class="campo h-11 w-[9.5rem] py-1.5" x-model="fb.hasta"></div>
+      <button type="button" class="btn-texto" x-show="fb.desde || fb.hasta" @click="fb.desde = ''; fb.hasta = ''">Todo el período</button>
+    </div>
+    <div class="mt-4 overflow-x-auto rounded-md border border-borde bg-white">
+      <table class="min-w-full text-[13px]">
+        <thead class="border-b border-borde bg-fondo text-left text-xs font-semibold text-gray-600"><tr><th class="px-3 py-2.5 font-semibold">Código</th><th class="px-3 py-2.5 font-semibold">Cuenta</th><th class="px-3 py-2.5 font-semibold">Tipo</th><th class="px-3 py-2.5 text-right font-semibold">Debe</th><th class="px-3 py-2.5 text-right font-semibold">Haber</th><th class="px-3 py-2.5 text-right font-semibold">Saldo</th></tr></thead>
+        <tbody class="divide-y divide-borde">
+          <template x-for="c in balanza.filas" :key="c.id">
+            <tr class="hover:bg-fondo/60"><td class="px-3 py-1.5 tabular-nums text-gray-500" x-text="c.codigo"></td><td class="px-3 py-1.5 font-medium" x-text="c.nombre"></td><td class="px-3 py-1.5 capitalize text-gray-600" x-text="c.tipo"></td>
+              <td class="px-3 py-1.5 text-right tabular-nums" x-text="c.debe > 0 ? dinero(c.debe) : ''"></td><td class="px-3 py-1.5 text-right tabular-nums" x-text="c.haber > 0 ? dinero(c.haber) : ''"></td>
+              <td class="px-3 py-1.5 text-right font-medium tabular-nums" :class="c.saldo < 0 ? 'text-red-700' : ''" x-text="dinero(c.saldo)"></td></tr>
+          </template>
+        </tbody>
+        <tfoot class="border-t-2 border-tinta bg-fondo/60 text-[13px] font-semibold"><tr><td colspan="3" class="px-3 py-2.5">Sumas <span class="ml-2 font-normal" :class="balanza.cuadra ? 'text-emerald-700' : 'text-red-700'" x-text="balanza.cuadra ? '✓ Debe y Haber cuadran' : '✗ NO cuadra'"></span></td><td class="px-3 py-2.5 text-right tabular-nums" x-text="dinero(balanza.debe)"></td><td class="px-3 py-2.5 text-right tabular-nums" x-text="dinero(balanza.haber)"></td><td></td></tr></tfoot>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= ASIENTO MANUAL ================= -->
+  <div x-show="modal === 'asiento'" x-cloak class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" id="modal-asiento" aria-label="Asiento manual">
+    <div class="absolute inset-0 bg-tinta/50" @click="cerrar()"></div>
+    <form x-show="modal === 'asiento'" @submit.prevent="guardarAsiento()" novalidate class="relative flex max-h-[94vh] w-full max-w-2xl flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-lg">
+      <header class="border-b border-borde px-5 py-4"><h2 class="font-titulo text-xl font-semibold">Asiento manual</h2><p class="mt-0.5 text-sm text-gray-600">Para ajustes y correcciones. El Debe y el Haber deben sumar lo mismo.</p></header>
+      <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5">
+        <div x-show="error && modal" x-cloak role="alert" class="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="error"></div>
+        <div class="grid gap-4 sm:grid-cols-[10rem_1fr]">
+          <div><label class="etiqueta" for="as-fecha">Fecha</label><input id="as-fecha" class="campo" type="date" :min="d.estado.inicio" :max="d.estado.hoy" x-model="as.fecha"></div>
+          <div><label class="etiqueta" for="as-desc">Descripción <span class="text-red-600" aria-hidden="true">*</span></label><input id="as-desc" class="campo" maxlength="300" autocomplete="off" x-model="as.descripcion" placeholder="Ej. Corrección de saldo de caja"></div>
+        </div>
+        <div class="space-y-2">
+          <div class="hidden grid-cols-[1fr_7rem_7rem_2rem] gap-2 text-xs font-semibold text-gray-600 sm:grid"><span>Cuenta</span><span class="text-right">Debe</span><span class="text-right">Haber</span><span></span></div>
+          <template x-for="(l, i) in as.lineas" :key="l.uid">
+            <div class="grid grid-cols-2 gap-2 rounded-md border border-borde p-2 sm:grid-cols-[1fr_7rem_7rem_2rem] sm:border-0 sm:p-0">
+              <select class="campo col-span-2 h-11 py-1 sm:col-span-1" x-model="l.cuenta_id" :aria-label="'Cuenta de la línea ' + (i + 1)"><option value="">Elegir cuenta…</option><template x-for="c in d.cuentas" :key="c.id"><option :value="c.id" x-text="c.codigo + '  ' + c.nombre"></option></template></select>
+              <input class="campo h-11 py-1 text-right tabular-nums" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Debe" x-model="l.debe" @input="if (l.debe !== '') l.haber = ''" :aria-label="'Debe de la línea ' + (i + 1)">
+              <input class="campo h-11 py-1 text-right tabular-nums" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Haber" x-model="l.haber" @input="if (l.haber !== '') l.debe = ''" :aria-label="'Haber de la línea ' + (i + 1)">
+              <button type="button" class="col-span-2 h-9 text-sm text-red-700 hover:bg-red-50 sm:col-span-1 sm:w-8 sm:rounded" @click="quitarLinea(i)" :disabled="as.lineas.length <= 2" :aria-label="'Quitar línea ' + (i + 1)">&times;</button>
+            </div>
+          </template>
+          <button type="button" class="btn-texto" @click="agregarLinea()">+ Agregar línea</button>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2 rounded-md px-4 py-3 text-sm" :class="cuadra ? 'bg-emerald-50 text-emerald-800' : 'bg-fondo'">
+          <span class="tabular-nums">Debe <span class="font-semibold" x-text="dinero(sumaDebe)"></span> &nbsp; Haber <span class="font-semibold" x-text="dinero(sumaHaber)"></span></span>
+          <span class="font-medium" x-text="cuadra ? '✓ Cuadra' : (sumaDebe === 0 && sumaHaber === 0 ? 'Escribe los montos' : 'Diferencia ' + dinero(Math.abs(sumaDebe - sumaHaber)))" :class="cuadra ? '' : (sumaDebe === 0 && sumaHaber === 0 ? 'text-gray-500' : 'text-red-700')"></span>
+        </div>
+      </div>
+      <footer class="flex justify-end gap-2 border-t border-borde bg-fondo/60 px-5 py-3" style="padding-bottom: calc(.75rem + env(safe-area-inset-bottom, 0px))">
+        <button type="button" class="btn btn-secundario" @click="cerrar()" :disabled="guardando">Cancelar</button>
+        <button type="submit" class="btn btn-primario" :disabled="guardando || !cuadra" x-text="guardando ? 'Guardando…' : 'Registrar asiento'"></button>
+      </footer>
+    </form>
+  </div>
+
+  <!-- ================= ANULAR ================= -->
+  <div x-show="anulando" x-cloak class="fixed inset-0 z-[55] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" id="modal-anular-partida" aria-label="Anular partida">
+    <div class="absolute inset-0 bg-tinta/50" @click="anulando = null"></div>
+    <form x-show="anulando" @submit.prevent="confirmarAnular()" class="relative w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-lg">
+      <template x-if="anulando"><div>
+        <h2 class="font-titulo text-xl font-semibold">¿Anular la partida?</h2>
+        <p class="mt-2 text-sm text-gray-600"><span class="font-medium text-tinta" x-text="anulando.p.numero"></span>: <span x-text="anulando.p.descripcion"></span>. No se borra: se crea una contrapartida con el Debe y el Haber invertidos.</p>
+        <div x-show="anulando.error" role="alert" class="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="anulando.error"></div>
+        <label class="etiqueta mt-3" for="ap-motivo">Motivo <span class="font-normal text-gray-500">(opcional)</span></label><input id="ap-motivo" class="campo" maxlength="200" x-model="anulando.motivo">
+        <div class="mt-4 flex gap-2"><button type="button" class="btn btn-secundario flex-1" @click="anulando = null" :disabled="anulando.guardando">Cancelar</button><button type="submit" class="btn btn-primario flex-1" :disabled="anulando.guardando" x-text="anulando.guardando ? 'Anulando…' : 'Sí, anular'"></button></div>
+      </div></template>
+    </form>
+  </div>
+</div>
+
+<script src="/js/finanzas-partidas.js"></script>

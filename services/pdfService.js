@@ -87,7 +87,7 @@ function bloqueCliente(doc, y, d) {
     altoIzq += doc.heightOfString(l.t, { width: anchoIzq }) + 2;
   });
   // La columna derecha también necesita su espacio (cada dato ocupa unos 27 puntos)
-  const datosDerecha = (d.tipo === 'cotizacion' ? (d.validez ? 1 : 0) : (d.estado ? 1 : 0)) + (d.vendedor ? 1 : 0);
+  const datosDerecha = (d.tipo === 'cotizacion' ? (d.validez ? 1 : 0) : (d.estado ? 1 : 0)) + (d.vendedor ? 1 : 0) + (d.vencimiento ? 1 : 0);
   const alto = Math.max(altoIzq + 28, 24 + datosDerecha * 27);
 
   doc.roundedRect(M, y, W, alto, 5).fill(FONDO);
@@ -114,6 +114,7 @@ function bloqueCliente(doc, y, d) {
   } else if (d.estado) {
     dato('ESTADO DE PAGO', d.estado === 'C' ? 'Pagada' : 'Pendiente de pago', d.estado === 'C' ? VERDE : AMBAR);
   }
+  if (d.vencimiento) dato('VENCE', fecha(d.vencimiento), AMBAR);
   if (d.vendedor) dato('ATENDIDO POR', d.vendedor);
 
   return y + alto + 16;

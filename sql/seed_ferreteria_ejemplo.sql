@@ -72,12 +72,3 @@ FROM (VALUES
 ) AS v(kit, hijo, cantidad)
 JOIN productos k ON k.sku = v.kit
 JOIN productos h ON h.sku = v.hijo;
-
-INSERT INTO ingresos (tipo, descripcion, monto, fecha, notas) VALUES
-  ('alquileres', 'Alquiler de bodega',          4500, CURRENT_DATE - 12, 'Mes actual'),
-  ('servicios',  'Servicio de corte a medida',   850, CURRENT_DATE - 5,  '');
-
-INSERT INTO gastos (categoria, descripcion, monto, fecha, notas) VALUES
-  ('logistica',     'Flete de mercadería',   1200, CURRENT_DATE - 10, ''),
-  ('operativos',    'Energía eléctrica',     2300, CURRENT_DATE - 7,  ''),
-  ('mantenimiento', 'Reparación de estante',  650, CURRENT_DATE - 3,  '');

@@ -16,7 +16,7 @@
 
   <%- include('../partials/toasts') %>
 
-  <script>window.APP = { moneda: <%- JSON.stringify(config.valoresPorDefecto.moneda) %> };</script>
+  <script>window.APP = { moneda: <%- JSON.stringify(config.valoresPorDefecto.moneda) %>, formatoFecha: <%- JSON.stringify(config.valoresPorDefecto.formatoFecha) %> };</script>
   <script src="/js/ui.js"></script>
   <%- script %>
 </body>

@@ -1,6 +1,7 @@
 const config = require('../client.config');
 const V = require('../utils/validar');
 const { numeroCorto } = require('../utils/documentos');
+const { hoyISO, sumarDias } = require('../utils/formato');
 const { unidadesDecimales } = require('../utils/unidades');
 const Pos = require('../models/pos');
 const Ventas = require('../models/ventas');
@@ -23,6 +24,7 @@ async function index(req, res, next) {
       tiposVariante: config.valoresPorDefecto.tiposVariante,
       unidadesDecimales: unidadesDecimales(),
       usuarioId: req.user.id,
+      hoy: hoyISO(),
       permisos: { facturas: req.user.rol === 'admin' && config.funcionalidades.facturas === true },
     };
     res.render('pos/index', { titulo: 'Punto de venta', datos });
@@ -89,6 +91,7 @@ function resumenVenta(v) {
     total: v.total,
     cliente: v.cliente_nombre || 'Consumidor Final',
     creado_en: v.creado_en,
+    fecha_vencimiento: v.fecha_vencimiento,
     items: v.items.map((i) => ({
       nombre: i.nombre, detalle: i.nombre_variante || '', cantidad: i.cantidad, precio: i.precio_unitario, importe: i.subtotal,
     })),
@@ -107,8 +110,15 @@ async function cobrar(req, res, next) {
       if (!/^[A-Za-z0-9_-]{8,64}$/.test(clave)) throw new V.ErrorValidacion('La clave del cobro no es válida.');
     }
 
+    // Vencimiento (solo para ventas a crédito): hoy o después, hasta 10 años
+    const pendiente = V.booleano(b.pendiente);
+    const fechaVencimiento = pendiente ? V.fechaISO(b.fecha_vencimiento, 'La fecha de vencimiento') : null;
+    if (fechaVencimiento && (fechaVencimiento < hoyISO() || fechaVencimiento > sumarDias(hoyISO(), 3650))) {
+      throw new V.ErrorValidacion('La fecha de vencimiento debe ser de hoy en adelante.');
+    }
+
     const r = await Ventas.crear({
-      clienteId, usuarioId: req.user.id, items, pendiente: V.booleano(b.pendiente), clave,
+      clienteId, usuarioId: req.user.id, items, pendiente, clave, fechaVencimiento,
     });
     res.status(r.repetida ? 200 : 201).json({ ok: true, repetida: r.repetida, venta: resumenVenta(r.venta) });
   } catch (err) {

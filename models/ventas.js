@@ -9,7 +9,7 @@ const Negocio = require('./negocio');
 async function obtener(id) {
   const { rows } = await db.query(
     `SELECT v.id, v.numero_factura, v.tipo_documento, v.estado, v.subtotal, v.impuesto, v.total,
-            v.creado_en, v.usuario_id, v.cliente_id,
+            v.creado_en, v.usuario_id, v.cliente_id, v.fecha_vencimiento,
             c.nombre AS cliente_nombre, c.rtn AS cliente_rtn, c.telefono AS cliente_telefono,
             c.direccion AS cliente_direccion, c.correo AS cliente_correo,
             u.nombre AS vendedor
@@ -41,7 +41,7 @@ async function idPorClave(clave) {
 // nunca con lo que diga el navegador.
 //   items: [{ producto_id, variante_id|null, cantidad }]  (ya validados y sin repetidos)
 //   clave: identificador del cobro; si se repite devuelve la venta que ya existe
-async function crear({ clienteId, usuarioId, items, pendiente, clave }) {
+async function crear({ clienteId, usuarioId, items, pendiente, clave, fechaVencimiento }) {
   if (clave) {
     const existente = await idPorClave(clave);
     if (existente) return { venta: await obtener(existente), repetida: true };
@@ -89,6 +89,8 @@ async function crear({ clienteId, usuarioId, items, pendiente, clave }) {
       );
       const v = r.rows[0].resultado;
       if (clave) await cx.query('UPDATE ventas SET clave_cliente = $1 WHERE id = $2', [clave, v.venta_id]);
+      // Venta a crédito: el vencimiento queda en la factura (si no se pone, se asume el plazo normal del negocio)
+      if (pendiente && fechaVencimiento) await cx.query('UPDATE ventas SET fecha_vencimiento = $1::date WHERE id = $2', [fechaVencimiento, v.venta_id]);
       return v;
     });
     return { venta: await obtener(resultado.venta_id), repetida: false };
@@ -181,7 +183,10 @@ async function listar(filtros) {
   )).rows[0];
 
   const filas = (await db.query(
-    `SELECT v.id, v.numero_factura, v.tipo_documento, v.estado, v.subtotal, v.impuesto, v.total, v.creado_en,
+    `SELECT v.id, v.numero_factura, v.tipo_documento, v.estado, v.subtotal, v.impuesto, v.total, v.creado_en, v.fecha_vencimiento,
+            CASE WHEN v.estado = 'P'
+                 THEN ROUND(v.total - COALESCE((SELECT SUM(a.monto) FROM abonos_clientes a WHERE a.venta_id = v.id AND NOT a.anulado), 0), 2)
+                 ELSE 0 END AS saldo,
             COALESCE(c.nombre, 'Consumidor Final') AS cliente, u.nombre AS vendedor
        ${desdeSql}
       ORDER BY v.creado_en DESC, v.id DESC
@@ -192,8 +197,24 @@ async function listar(filtros) {
   return { filas: hayMas ? filas.slice(0, limite) : filas, hayMas, resumen };
 }
 
-// 'P' -> 'C'. Devuelve 'pagada', 'ya_estaba_pagada' o null si no existe.
-async function marcarPagada(id) {
+// Cobra el saldo que falta de una factura pendiente. Con la contabilidad iniciada registra un abono
+// (entra a Caja y baja Cuentas por cobrar); si no, solo cambia el estado.
+// Devuelve 'pagada', 'ya_estaba_pagada' o null si no existe.
+async function marcarPagada(id, usuarioId) {
+  const inicio = (await db.query('SELECT contabilidad_inicio FROM configuracion_negocio WHERE id = 1')).rows[0];
+  if (inicio && inicio.contabilidad_inicio) {
+    const v = (await db.query('SELECT estado FROM ventas WHERE id = $1', [id])).rows[0];
+    if (!v) return null;
+    if (v.estado === 'C') return 'ya_estaba_pagada';
+    try {
+      const saldo = (await db.query("SELECT saldo FROM v_cxc WHERE origen = 'venta' AND doc_id = $1", [id])).rows[0];
+      await db.query('SELECT registrar_abono_cliente($1, NULL, $2, NULL, $3, $4, $5)', [id, saldo.saldo, 'caja', 'Cobro registrado desde Facturas', usuarioId || null]);
+      return 'pagada';
+    } catch (err) {
+      if (err.code === 'P0001' && /ya está pagada/.test(err.message)) return 'ya_estaba_pagada'; // otra persona la cobró justo antes
+      throw err;
+    }
+  }
   const { rowCount } = await db.query("UPDATE ventas SET estado = 'C' WHERE id = $1 AND estado = 'P'", [id]);
   if (rowCount > 0) return 'pagada';
   const { rows } = await db.query('SELECT estado FROM ventas WHERE id = $1', [id]);

@@ -251,9 +251,20 @@
             <input type="checkbox" class="interruptor" x-model="pendiente" @change="cambioCarrito()">
             <span class="text-sm">
               <span class="font-medium">Dejar pendiente de pago</span>
-              <span class="block text-xs text-gray-500">Para ventas a crédito. Se marca como pagada después, en Facturas.</span>
+              <span class="block text-xs text-gray-500">Para ventas a crédito. Queda en Cuentas por cobrar hasta que el cliente pague.</span>
             </span>
           </label>
+
+          <div x-show="pendiente" x-cloak class="mt-2 rounded-md bg-fondo px-3 py-2.5">
+            <label class="etiqueta text-xs" for="pos-vence">Vence el (opcional)</label>
+            <div class="flex flex-wrap items-center gap-2">
+              <input id="pos-vence" type="date" class="campo h-11 w-[9.5rem] py-1.5" x-model="fechaVenc" :min="d.hoy" @change="cambioCarrito()">
+              <template x-for="dias in [15, 30, 60]" :key="dias">
+                <button type="button" class="h-11 rounded-md border border-borde bg-white px-3 text-sm font-medium hover:bg-fondo" @click="plazo(dias)" x-text="dias + ' días'"></button>
+              </template>
+            </div>
+            <p class="ayuda">Si lo dejas vacío se considera el plazo normal del negocio.</p>
+          </div>
 
           <div x-show="errorCobro" x-cloak role="alert" class="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="errorCobro"></div>
 
@@ -279,6 +290,7 @@
         </div>
         <p class="mt-3 font-titulo text-xl font-semibold tabular-nums" x-text="'No. ' + exito.numero_corto"></p>
         <p class="mt-0.5 text-xs text-gray-500" x-show="exito.tipo_documento === 'interno'">No válido para crédito fiscal</p>
+        <p class="mt-1 text-sm text-amber-700" x-show="exito.estado === 'P'">Pasó a Cuentas por cobrar<span x-show="exito.fecha_vencimiento" x-text="'. Vence el ' + fechaTexto(exito.fecha_vencimiento)"></span>.</p>
 
         <p class="mt-4 font-titulo text-4xl font-semibold tabular-nums" x-text="dinero(exito.total)"></p>
         <p class="mt-1 text-sm text-gray-600">Cliente: <span class="font-medium text-tinta" x-text="exito.cliente"></span></p>

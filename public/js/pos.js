@@ -47,6 +47,7 @@ document.addEventListener('alpine:init', function () {
       carrito: [],
       cliente: null,
       pendiente: false,
+      fechaVenc: '',
       clave: null,
       consumo: {},
       totales: { subtotal: 0, impuesto: 0, total: 0, importes: [] },
@@ -391,6 +392,7 @@ document.addEventListener('alpine:init', function () {
         this.carrito = [];
         this.cliente = null;
         this.pendiente = false;
+        this.fechaVenc = '';
         this.cambioCarrito();
       },
 
@@ -462,9 +464,17 @@ document.addEventListener('alpine:init', function () {
         return 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
       },
 
+      // Atajos de plazo para ventas a crédito: hoy + N días
+      plazo(dias) {
+        const p = this.d.hoy.split('-').map(Number);
+        this.fechaVenc = new Date(Date.UTC(p[0], p[1] - 1, p[2] + dias)).toISOString().slice(0, 10);
+        this.cambioCarrito();
+      },
+
       datosVenta() {
         return {
           cliente_id: this.cliente ? this.cliente.id : null,
+          fecha_vencimiento: this.pendiente && this.fechaVenc ? this.fechaVenc : null,
           items: this.carrito.map((l) => ({ producto_id: l.producto_id, variante_id: l.variante_id, cantidad: l.cantidad })),
         };
       },
@@ -483,6 +493,7 @@ document.addEventListener('alpine:init', function () {
           this.carrito = [];
           this.cliente = null;
           this.pendiente = false;
+          this.fechaVenc = '';
           this.clave = null;
           this.recalcular();
           this.guardar();
@@ -570,6 +581,7 @@ document.addEventListener('alpine:init', function () {
             t: Date.now(),
             cliente_id: this.cliente ? this.cliente.id : null,
             pendiente: this.pendiente,
+            fecha_venc: this.fechaVenc,
             lineas: this.carrito.map((l) => ({ producto_id: l.producto_id, variante_id: l.variante_id, cantidad: l.cantidad })),
           }));
         } catch (e) { /* almacenamiento bloqueado: no pasa nada */ }
@@ -593,6 +605,7 @@ document.addEventListener('alpine:init', function () {
           });
           this.cliente = g.cliente_id ? this.clientes.find((c) => c.id === g.cliente_id) || null : null;
           this.pendiente = !!g.pendiente;
+          this.fechaVenc = typeof g.fecha_venc === 'string' && g.fecha_venc >= this.d.hoy ? g.fecha_venc : '';
 
           const avisos = this.reconciliar(false);
           if (this.carrito.length) {

@@ -85,7 +85,10 @@
             <td class="whitespace-nowrap px-4 py-3 text-gray-600 tabular-nums" x-text="fila.fecha_texto"></td>
             <td class="max-w-[14rem] truncate px-4 py-3" :class="fila.cliente === 'Consumidor Final' ? 'text-gray-500' : ''" x-text="fila.cliente"></td>
             <td class="px-4 py-3"><span class="insignia" :class="fila.tipo_documento === 'fiscal' ? 'ins-marca' : 'ins-neutra'" x-text="fila.tipo_documento === 'fiscal' ? 'Fiscal' : 'Interna'"></span></td>
-            <td class="px-4 py-3"><span class="insignia" :class="fila.estado === 'C' ? 'ins-ok' : 'ins-bajo'"><i></i><span x-text="fila.estado === 'C' ? 'Pagada' : 'Pendiente'"></span></span></td>
+            <td class="px-4 py-3">
+              <span class="insignia" :class="fila.estado === 'C' ? 'ins-ok' : 'ins-bajo'"><i></i><span x-text="fila.estado === 'C' ? 'Pagada' : 'Pendiente'"></span></span>
+              <span class="mt-0.5 block text-xs text-gray-500 tabular-nums" x-show="fila.estado === 'P'">Saldo <span x-text="dinero(fila.saldo)"></span></span>
+            </td>
             <td class="whitespace-nowrap px-4 py-3 text-right font-medium tabular-nums" x-text="dinero(fila.total)"></td>
             <td class="whitespace-nowrap px-4 py-3 text-right">
               <a :href="'/facturas/' + fila.id + '/pdf'" target="_blank" rel="noopener" class="btn-texto">Ver PDF</a>
@@ -113,6 +116,7 @@
         <div class="mt-2 flex flex-wrap gap-1.5">
           <span class="insignia" :class="fila.tipo_documento === 'fiscal' ? 'ins-marca' : 'ins-neutra'" x-text="fila.tipo_documento === 'fiscal' ? 'Fiscal' : 'Interna'"></span>
           <span class="insignia" :class="fila.estado === 'C' ? 'ins-ok' : 'ins-bajo'"><i></i><span x-text="fila.estado === 'C' ? 'Pagada' : 'Pendiente'"></span></span>
+          <span class="text-xs text-gray-500 tabular-nums self-center" x-show="fila.estado === 'P'" x-text="'Saldo ' + dinero(fila.saldo)"></span>
         </div>
         <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-borde pt-3">
           <a :href="'/facturas/' + fila.id + '/pdf'" target="_blank" rel="noopener" class="btn btn-secundario h-11 flex-1">Ver PDF</a>
@@ -142,7 +146,7 @@
           <p class="mt-2 text-sm text-gray-600">
             La factura <span class="font-medium text-tinta tabular-nums" x-text="confirmar.numero_corto"></span> de
             <span class="font-medium text-tinta" x-text="confirmar.cliente"></span> por
-            <span class="font-medium text-tinta tabular-nums" x-text="dinero(confirmar.total)"></span> quedará como pagada. Esto no se puede deshacer desde aquí.
+            <span class="font-medium text-tinta tabular-nums" x-text="dinero(confirmar.total)"></span> se cobra completa: el saldo de <span class="font-medium text-tinta tabular-nums" x-text="dinero(confirmar.saldo)"></span> entra a Caja. Si el cliente paga en partes, usa Cuentas por cobrar. Esto no se puede deshacer desde aquí.
           </p>
           <div class="mt-5 flex gap-2" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
             <button type="button" class="btn btn-secundario flex-1" @click="cancelarPago()" :disabled="pagando">Cancelar</button>

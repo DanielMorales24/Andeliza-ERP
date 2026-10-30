@@ -85,7 +85,39 @@ function json(v, etiqueta) {
   }
 }
 
+// Fecha 'YYYY-MM-DD' real (rechaza 2026-13-45). Vacía = null.
+function fechaISO(v, etiqueta) {
+  const t = texto(v);
+  if (!t) return null;
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  const f = d && new Date(Date.UTC(+d[1], +d[2] - 1, +d[3]));
+  if (!d || f.getUTCFullYear() !== +d[1] || f.getUTCMonth() !== +d[2] - 1 || f.getUTCDate() !== +d[3]) {
+    throw new ErrorValidacion(`${etiqueta} no es una fecha válida.`);
+  }
+  return t;
+}
+
+// Monto en dinero: mayor que cero y con 2 decimales como máximo (no se redondea en silencio)
+function dinero(v, etiqueta, { min = 0.01, max = 999999999.99 } = {}) {
+  const t = texto(v).replace(',', '.');
+  if (t === '') throw new ErrorValidacion(`${etiqueta} es obligatorio.`);
+  const n = Number(t);
+  if (!Number.isFinite(n)) throw new ErrorValidacion(`${etiqueta} debe ser un número.`);
+  if (Math.abs(n * 100 - Math.round(n * 100)) > 1e-6) throw new ErrorValidacion(`${etiqueta} no puede tener más de 2 decimales.`);
+  if (n < min) throw new ErrorValidacion(min === 0.01 ? `${etiqueta} debe ser mayor que cero.` : `${etiqueta} no puede ser menor que ${min}.`);
+  if (n > max) throw new ErrorValidacion(`${etiqueta} es demasiado grande.`);
+  return Math.round(n * 100) / 100;
+}
+
+// Cuenta donde entra o sale el dinero: Caja o Bancos
+function cuentaEfectivo(v, mensaje) {
+  const t = texto(v);
+  if (t !== 'caja' && t !== 'bancos') throw new ErrorValidacion(mensaje || 'Elige si es Caja o Bancos.');
+  return t;
+}
+
 module.exports = {
+  fechaISO, dinero, cuentaEfectivo,
   ErrorValidacion, texto, limitar, requerido, opcional, correo, rtn,
   numero, idOpcional, eleccion, booleano, json,
 };

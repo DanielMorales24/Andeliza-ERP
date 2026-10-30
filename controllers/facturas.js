@@ -89,7 +89,7 @@ async function datos(req, res, next) {
 
 async function marcarPagada(req, res, next) {
   try {
-    const r = await Ventas.marcarPagada(Number(req.params.id));
+    const r = await Ventas.marcarPagada(Number(req.params.id), req.user.id);
     if (!r) return res.status(404).json({ error: 'No se encontró la factura.' });
     res.json({ ok: true, estado: 'C', yaEstabaPagada: r === 'ya_estaba_pagada' });
   } catch (err) {

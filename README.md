@@ -13,8 +13,8 @@ Stack: Node.js 20 + Express, EJS, PostgreSQL (Supabase), Tailwind y Alpine.js po
 | 1 | Base, login, layout, dashboard | Hecha |
 | 2 | CRUDs: categorías, clientes, proveedores, productos (imagen, variantes, kits) y facturación interna | Hecha |
 | 3 | POS y facturación (PDF, cotización, historial) | Hecha |
-| 4 | Inventario visual, variantes | Pendiente |
-| 5 | Finanzas | Pendiente |
+| 4 | Finanzas y contabilidad: partida doble, cuentas por cobrar y por pagar, reportes en PDF | Hecha |
+| 5 | Inventario visual y alertas de stock | Pendiente |
 | 6 | Estadísticas | Pendiente |
 | 7 | Configuración | Pendiente |
 | 8 | Vista móvil y QR | Pendiente |
@@ -28,8 +28,12 @@ Stack: Node.js 20 + Express, EJS, PostgreSQL (Supabase), Tailwind y Alpine.js po
    Si la base todavía tiene las tablas en inglés, en `schema_es.sql` borra las líneas `/*` y `*/`
    del bloque DROP del inicio para que las elimine antes de crear las nuevas.
    Si la base ya tenía el esquema de una fase anterior y no quieres borrarla, correr en orden las migraciones
-   que falten (`sql/migracion_fase2.sql`, `sql/migracion_fase3.sql`) y después `sql/functions_es.sql` completo
-   (se puede volver a correr sin problema). Las migraciones se pueden repetir: no borran datos.
+   que falten (`sql/migracion_fase2.sql`, `sql/migracion_fase3.sql`, `sql/migracion_fase4.sql`) y después
+   `sql/functions_es.sql` completo (se puede volver a correr sin problema). **Desde la Fase 4 el orden importa:
+   primero la migración y después `functions_es.sql`**, que además inicia la contabilidad si la base ya tiene datos.
+   Las migraciones se pueden repetir: no borran datos.
+   Opcional, solo para probar Finanzas con datos de ejemplo (nunca en la base de un cliente real):
+   `sql/seed_finanzas_demo.sql`, después de un seed de catálogo.
 3. Copiar `.env.example` a `.env` y llenar `DATABASE_URL`, `SESSION_SECRET`, `SUPABASE_URL` y
    `SUPABASE_KEY` (hacen falta para subir imágenes de productos).
 4. `npm install` y luego `npm run dev`. Abrir http://localhost:3000.
@@ -46,17 +50,20 @@ db.js                  Pool de pg y conversión de tipos
 middlewares/auth.js    requireAuth, soloRoles, requireFuncionalidad
 routes/ controllers/ models/   Un archivo por módulo
 controllers/entidad.js Fábrica de CRUD para listados con modal (categorías, clientes, proveedores)
+controllers/finanzas.js, cartera.js, movimientos.js   Resumen, libro diario, CxC y CxP, ingresos/gastos/compras, reportes
 controllers/pos.js     POS: catálogo, alta rápida de cliente, cobro y cotización
 controllers/facturas.js, controllers/documentos.js   Historial, marcar pagada y armado de los PDF
 models/ventas.js       Cobro (crear_venta + clave anti-duplicado), cotización, historial con filtros
 models/pos.js, models/negocio.js   Catálogo del POS; datos del negocio y modo de facturación
 services/pdfService.js PDF en memoria con pdfkit (factura, comprobante interno, cotización)
+services/reportesPdfService.js  Reportes contables en PDF (resultados, flujo de caja, balance, antigüedad)
+models/contabilidad.js, cartera.js, movimientos.js   Libro, reportes, CxC/CxP e ingresos/gastos/compras
 utils/totales.js       Cálculo de subtotal, impuesto y total en centavos (igual que Postgres)
 services/storageService.js  Subida y borrado de imágenes en Supabase Storage (solo servidor)
-public/js/             ui.js (utilidades), entidades.js, inventario.js, producto-form.js, pos.js, facturas.js (Alpine)
+public/js/             ui.js (utilidades), entidades.js, inventario.js, producto-form.js, pos.js, facturas.js, finanzas-*.js (Alpine)
 routes/modulos.js      Páginas "próximamente" de los módulos que aún no existen
 views/                 EJS: layouts, partials y una carpeta por módulo
-sql/                   schema_es, functions_es, migracion_fase2, migracion_fase3, seed_deportes y seed_ferreteria_ejemplo
+sql/                   schema_es, functions_es, migracion_fase2/3/4, seed_deportes, seed_ferreteria_ejemplo y seed_finanzas_demo
 ```
 
 ## Facturación: modo SAR o modo interno
@@ -146,6 +153,94 @@ Todas son opcionales: si no existen se usa el valor de la derecha.
 | `diasValidezCotizacion` | `15` | Días de vigencia que muestra la cotización |
 | `unidadesDecimales` | `kilo, libra, metro, yarda, litro, galon, onza` | Unidades que se pueden vender en fracciones; las demás van en enteros |
 
+## Finanzas y contabilidad (`/finanzas`, solo administrador)
+
+Seis pestañas: **Resumen**, **Por cobrar**, **Por pagar**, **Movimientos**, **Libro diario** y **Reportes**.
+Todo el dinero se registra con **partida doble**: cada operación genera una partida (asiento) cuyo Debe y Haber suman
+exactamente lo mismo. La base de datos lo impone con dos candados: una partida descuadrada no se confirma, y lo ya
+registrado no se modifica ni se borra (un error se corrige con una **contrapartida**, que queda a la vista en el libro).
+
+### Cómo se inicia
+Desde el Resumen, botón **Iniciar contabilidad hoy** (o `SELECT generar_apertura_contable();`). Eso toma el estado de hoy como
+punto de partida: **Inventario** (existencias a costo) **+ Cuentas por cobrar** (ventas pendientes) **= Capital**. Caja y Bancos
+arrancan en cero: con *Saldo inicial* se registra con cuánto dinero empezó el negocio. Lo anterior a ese día no entra al libro
+(sigue visible en Facturas) y no se puede registrar nada con fecha anterior. Mientras no se inicie, el POS vende igual y no genera partidas.
+
+### Plan de cuentas
+| Código | Cuenta | Tipo |
+|---|---|---|
+| 1101 / 1102 | Caja general / Bancos | Activo |
+| 1201 | Cuentas por cobrar | Activo |
+| 1301 | Inventario de mercadería | Activo |
+| 2101 | Cuentas por pagar | Pasivo |
+| 2201 | Impuesto sobre ventas por pagar | Pasivo |
+| 3101 | Capital y aportes | Patrimonio |
+| 4101 | Ventas | Ingreso |
+| 4201 a 4205 | Intereses, alquileres, servicios, inversiones y otros ingresos | Ingreso |
+| 5101 | Costo de ventas | Gasto |
+| 5201 | Ajustes de inventario (mermas y sobrantes) | Gasto |
+| 6101 a 6105 | Logística, marketing, operativos, mantenimiento y otros gastos | Gasto |
+
+El sistema ubica cada cuenta por su `clave` (no por el código), así que se puede renumerar sin romper nada.
+
+### Qué partida genera cada operación
+| Operación | Debe | Haber |
+|---|---|---|
+| Venta pagada en el POS | Caja (total) · Costo de ventas | Ventas (subtotal) · Impuesto por pagar · Inventario |
+| Venta pendiente en el POS | Cuentas por cobrar (total) · Costo de ventas | Ventas · Impuesto por pagar · Inventario |
+| Abono de un cliente | Caja o Bancos | Cuentas por cobrar |
+| Ingreso cobrado / por cobrar | Caja o Bancos / Cuentas por cobrar | Cuenta del ingreso |
+| Gasto pagado / por pagar | Cuenta del gasto | Caja o Bancos / Cuentas por pagar |
+| Compra pagada / por pagar | Inventario | Caja o Bancos / Cuentas por pagar |
+| Pago a proveedor | Cuentas por pagar | Caja o Bancos |
+| Anulación de cualquiera | (invierte la partida original) | |
+
+### Cuentas por cobrar y por pagar
+- **Por cobrar**: ventas del POS dejadas como «Pendiente de pago» e ingresos «Por cobrar». **Por pagar**: compras y gastos «Por pagar».
+- Cada deuda trae su saldo, su fecha de vencimiento y su antigüedad: *Al día*, *Vencido 1 a 30*, *31 a 60*, *61 a 90* y *Más de 90 días*.
+  Si el documento no trae vencimiento se supone `configuracion_negocio.dias_credito` (30 por defecto) y se marca «(est.)».
+- **Abonos y pagos parciales**: la deuda baja, el dinero entra o sale de Caja o Bancos, y cuando el saldo llega a cero el documento pasa a cobrado o pagado.
+  No se puede abonar más que el saldo, ni con fecha futura ni anterior al documento. Un abono o pago se puede **anular** y la deuda vuelve a quedar pendiente.
+- En el POS, al dejar una venta pendiente se puede poner el vencimiento (atajos de 15, 30 y 60 días). En **Facturas**, «Marcar pagada» cobra el saldo que falte en Caja.
+
+### Movimientos
+Ingresos varios, gastos y compras de inventario, cada uno con su condición (*Cobrado/Pagado* o *Por cobrar/Por pagar*).
+Una **compra** sube el stock (por variante si el producto las tiene) y recalcula el costo del producto con **promedio ponderado**.
+Se pueden anular ingresos y gastos que no tengan cobros o pagos; las compras no se anulan en esta fase (se corrige con un asiento manual).
+
+### Inventario del libro y existencias
+El stock puede cambiar por fuera del libro (por ejemplo, editando un producto). Cuando la diferencia con el libro llega a L 1.00 o más,
+el Resumen ofrece **Conciliar inventario**: la diferencia va a *capital* (mercadería inicial) o a *ajuste de inventario* (mermas y sobrantes, que pasa por resultados).
+
+### Reportes (PDF)
+| Reporte | Qué muestra |
+|---|---|
+| Estado de resultados | Ingresos − costo de ventas − gastos = utilidad, con el porcentaje de cada línea sobre los ingresos |
+| Flujo de caja | Saldo inicial + entradas − salidas = saldo final de Caja y Bancos, por tipo de operación |
+| Balance general | Activos = Pasivos + Patrimonio, con la verificación de que cuadra |
+| Antigüedad de saldos | Por cobrar y por pagar repartidos por días de atraso |
+
+Los ingresos y gastos se reconocen cuando ocurren, no cuando se cobran o pagan: por eso la utilidad puede ser distinta del flujo de caja.
+
+### Endpoints de la Fase 4
+| Método y ruta | Qué hace |
+|---|---|
+| `GET /finanzas` | Resumen: tarjetas y gráfico de 6 meses |
+| `POST /finanzas/iniciar` · `/saldo-inicial` · `/conciliar-inventario` | Inicio, saldo inicial de Caja o Bancos y conciliación |
+| `GET /finanzas/cxc` · `/cxp` (y `/datos`) | Pantalla y lista JSON de cuentas por cobrar o por pagar |
+| `GET /finanzas/cxc/:origen/:id` · `/cxp/:origen/:id` | Historial de abonos o pagos de un documento |
+| `POST /finanzas/cxc/abonos` · `/cxp/pagos` | Registra un abono o pago (`origen`, `doc_id`, `monto`, `fecha`, `cuenta`, `notas`) |
+| `POST /finanzas/cxc/abonos/:id/anular` · `/cxp/pagos/:id/anular` | Anula un abono o pago |
+| `GET /finanzas/movimientos` (y `/datos?tipo=`) | Ingresos, gastos y compras |
+| `POST /finanzas/ingresos` · `/gastos` · `/compras` | Registra con su condición de pago |
+| `POST /finanzas/ingresos/:id/anular` · `/gastos/:id/anular` | Anula |
+| `GET /finanzas/partidas` (y `/datos`, `/balanza`) | Libro diario y balanza de comprobación |
+| `POST /finanzas/partidas` · `/partidas/:id/anular` | Asiento manual y su anulación |
+| `GET /finanzas/reportes/{estado-resultados,flujo-caja,balance-general,antiguedad-saldos}.pdf` | Reportes (`?descargar=1` para bajarlos) |
+
+Las rutas responden 404 si `funcionalidades.finanzas` está en `false`; las compras, si `compras` está en `false`.
+Ajustes en la base (`configuracion_negocio`): `zona_horaria` (para saber qué día es «hoy») y `dias_credito`.
+
 ## Cómo crear un cliente nuevo
 
 1. **Clonar el repo** en una carpeta nueva con el nombre del cliente y crear un repositorio propio para él.
@@ -190,6 +285,12 @@ Antes de entregarlo: cambiar las contraseñas de `admin` y `vendedor`.
 - **RTN**: es opcional. Si se escribe se guarda solo con dígitos (acepta guiones y espacios).
 - **Agregar un módulo**: crear su router, controlador y modelo, y registrarlo en `app.js` antes
   de `routes/modulos.js`.
+
+## Límites conocidos de la contabilidad
+
+- El POS manda siempre el dinero a Caja: todavía no registra el método de pago (efectivo, tarjeta, transferencia).
+- No hay devoluciones ni ventas anuladas, ni crédito fiscal sobre las compras (las compras entran por su costo total).
+- No hay cierre de períodos: las partidas anteriores a hoy se pueden registrar mientras no sean anteriores al inicio de la contabilidad.
 
 ## Pendiente antes de producción real
 

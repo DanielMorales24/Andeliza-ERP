@@ -38,6 +38,7 @@ async function documentoDeVenta(venta) {
     numeroCompleto: venta.numero_factura,
     fecha: venta.creado_en,
     estado: venta.estado,
+    vencimiento: venta.estado === 'P' ? venta.fecha_vencimiento : null,
     cliente: venta.cliente_id
       ? { nombre: venta.cliente_nombre, rtn: venta.cliente_rtn, telefono: venta.cliente_telefono, direccion: venta.cliente_direccion, correo: venta.cliente_correo }
       : null,
