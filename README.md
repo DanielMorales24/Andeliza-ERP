@@ -167,5 +167,3 @@ Andeliza ERP está en desarrollo y hay decisiones tomadas a propósito para avan
 ## Autor
 
 Daniel Morales. Proyecto de graduación de la carrera de Ingeniería en Informática, CEUTEC Honduras.
-A c t u a l i z a c i � n   d e   i s s u e s   c o m p l e t a d o s  
- 
