@@ -62,7 +62,7 @@ El proyecto es individual y usa un método sencillo: **Kanban con iteraciones se
 
 ### Definición de listo y de terminado
 
-**Una historia está lista para empezar cuando** tiene rol, objetivo, criterios Gherkin y su corte, y se sabe qué tablas toca.
+**Una historia está lista para empezar cuando** tiene rol, objetivo, criterios Gherkin y su cort Tee, y se sabe qué tablas toca.
 
 **Una historia está terminada cuando:**
 
