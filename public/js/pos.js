@@ -431,6 +431,7 @@ document.addEventListener('alpine:init', function () {
       quitarCliente() { this.cliente = null; this.cambioCarrito(); },
 
       abrirNuevoCliente() {
+        if ((this.d.permisos || {}).crearCliente === false) return;   // el servidor también lo rechaza
         const q = this.qCliente.trim();
         const soloDigitos = /^[\d\s-]+$/.test(q);
         this.fc = { nombre: q && !soloDigitos ? q : '', telefono: q && soloDigitos ? q : '', rtn: '', correo: '' };

@@ -1,0 +1,136 @@
+<script type="application/json" id="datos-pagina"><%- JSON.stringify(datos).replace(/</g, '\\u003c') %></script>
+<%- include('../partials/config_tabs', { seccion }) %>
+
+<div x-data="configUsuarios" @keydown.escape.window="cerrarTodo()">
+
+  <div class="flex flex-wrap items-center gap-3">
+    <div class="relative min-w-[220px] flex-1 sm:max-w-md">
+      <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" x-model="busqueda" placeholder="Buscar por nombre, usuario o rol" aria-label="Buscar usuarios" class="campo h-11 pl-9" autocomplete="off">
+    </div>
+    <p class="text-sm text-gray-500"><span x-text="filtrados.length"></span> <span x-text="filtrados.length === 1 ? 'usuario' : 'usuarios'"></span></p>
+    <button type="button" id="btn-nuevo-usuario" class="btn btn-primario ml-auto h-11 px-5" @click="nuevo()">Nuevo usuario</button>
+  </div>
+
+  <!-- Escritorio -->
+  <div class="mt-4 hidden overflow-hidden rounded-lg border border-borde bg-white md:block">
+    <table class="w-full text-left text-sm">
+      <thead class="bg-fondo text-xs uppercase tracking-wide text-gray-500">
+        <tr><th class="px-4 py-3 font-medium">Usuario</th><th class="px-4 py-3 font-medium">Rol</th><th class="px-4 py-3 font-medium">Estado</th><th class="px-4 py-3 font-medium">Último acceso</th><th class="px-4 py-3 text-right font-medium">Acciones</th></tr>
+      </thead>
+      <tbody class="divide-y divide-borde">
+        <template x-for="u in filtrados" :key="u.id">
+          <tr :class="u.activo ? '' : 'bg-fondo/60 text-gray-500'" :data-usuario="u.usuario">
+            <td class="px-4 py-3">
+              <p class="font-medium"><span x-text="u.nombre"></span> <span x-show="u.id === d.yo" class="ml-1 rounded bg-fondo px-1.5 py-0.5 text-xs font-normal text-gray-600">Tú</span></p>
+              <p class="text-xs text-gray-500">@<span x-text="u.usuario"></span>
+                <span x-show="u.debe_cambiar_contrasena" class="ml-2 text-amber-700">Debe cambiar su contraseña</span>
+                <span x-show="u.bloqueado" class="ml-2 text-red-700">Bloqueado por intentos fallidos</span></p>
+            </td>
+            <td class="px-4 py-3"><span class="insignia ins-neutra" x-text="u.rol"></span></td>
+            <td class="px-4 py-3"><span class="insignia" :class="u.activo ? 'ins-ok' : 'ins-agotado'" x-text="u.activo ? 'Activo' : 'Inactivo'"></span></td>
+            <td class="px-4 py-3 text-gray-600" x-text="u.ultimo_acceso_texto"></td>
+            <td class="px-4 py-3">
+              <div class="flex justify-end gap-1">
+                <button type="button" class="btn-texto" data-accion="editar" @click="editar(u)">Editar</button>
+                <button type="button" class="btn-texto" data-accion="codigo" x-show="u.activo" @click="generarCodigo(u)">Resetear contraseña</button>
+                <button type="button" class="btn-texto" data-accion="estado" x-show="u.id !== d.yo" @click="pedirEstado(u)" x-text="u.activo ? 'Desactivar' : 'Activar'"></button>
+              </div>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+    <p x-show="filtrados.length === 0" x-cloak class="px-4 py-8 text-center text-sm text-gray-500">No hay usuarios con esa búsqueda.</p>
+  </div>
+
+  <!-- Celular -->
+  <ul class="mt-4 space-y-3 md:hidden">
+    <template x-for="u in filtrados" :key="'m' + u.id">
+      <li class="rounded-lg border border-borde bg-white p-4" :class="u.activo ? '' : 'opacity-75'">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="truncate font-medium"><span x-text="u.nombre"></span> <span x-show="u.id === d.yo" class="text-xs font-normal text-gray-500">(tú)</span></p>
+            <p class="text-xs text-gray-500">@<span x-text="u.usuario"></span> · <span x-text="u.ultimo_acceso_texto"></span></p>
+          </div>
+          <span class="insignia" :class="u.activo ? 'ins-ok' : 'ins-agotado'" x-text="u.activo ? 'Activo' : 'Inactivo'"></span>
+        </div>
+        <p class="mt-2"><span class="insignia ins-neutra" x-text="u.rol"></span>
+          <span x-show="u.debe_cambiar_contrasena" class="ml-2 text-xs text-amber-700">Debe cambiar su contraseña</span></p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button type="button" class="btn btn-secundario h-10 px-3" @click="editar(u)">Editar</button>
+          <button type="button" class="btn btn-secundario h-10 px-3" x-show="u.activo" @click="generarCodigo(u)">Resetear contraseña</button>
+          <button type="button" class="btn btn-secundario h-10 px-3" x-show="u.id !== d.yo" @click="pedirEstado(u)" x-text="u.activo ? 'Desactivar' : 'Activar'"></button>
+        </div>
+      </li>
+    </template>
+  </ul>
+
+  <!-- Nuevo / editar usuario -->
+  <div x-show="m" x-cloak class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="t-usuario">
+    <button type="button" class="absolute inset-0 bg-black/40" aria-label="Cerrar" @click="cerrarTodo()" tabindex="-1"></button>
+    <form @submit.prevent="guardar()" class="relative max-h-full w-full max-w-md overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl">
+      <h2 id="t-usuario" class="font-titulo text-xl font-semibold" x-text="f.id ? 'Editar usuario' : 'Nuevo usuario'"></h2>
+      <div x-show="err" role="alert" class="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="err"></div>
+
+      <label for="u-nombre" class="etiqueta mt-4">Nombre completo</label>
+      <input id="u-nombre" class="campo" x-model="f.nombre" maxlength="150" required autocomplete="off">
+
+      <label for="u-usuario" class="etiqueta mt-4">Usuario (para iniciar sesión)</label>
+      <input id="u-usuario" class="campo" x-model="f.usuario" maxlength="60" required autocomplete="off" autocapitalize="none" spellcheck="false" :disabled="Boolean(f.id)">
+
+      <div x-show="!f.id">
+        <label for="u-contrasena" class="etiqueta mt-4">Contraseña inicial</label>
+        <div class="relative">
+          <input id="u-contrasena" class="campo pr-20" :type="ver ? 'text' : 'password'" x-model="f.contrasena" maxlength="72" autocomplete="new-password">
+          <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 px-2 text-xs font-medium text-primario" @click="ver = !ver" x-text="ver ? 'Ocultar' : 'Mostrar'"></button>
+        </div>
+        <p class="mt-1 text-xs text-gray-500">Mínimo 8 caracteres, con letras y números.</p>
+        <label class="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" x-model="f.debe_cambiar"> Pedir que la cambie en su primer inicio de sesión</label>
+      </div>
+
+      <label for="u-rol" class="etiqueta mt-4">Rol</label>
+      <select id="u-rol" class="campo" x-model="f.rol_id" :disabled="f.id === d.yo">
+        <template x-for="r in rolesElegibles" :key="r.id"><option :value="r.id" x-text="r.nombre" :selected="String(r.id) === String(f.rol_id)"></option></template>
+      </select>
+      <p x-show="f.id === d.yo" class="mt-1 text-xs text-gray-500">No puedes cambiar tu propio rol.</p>
+
+      <div class="mt-6 flex gap-3">
+        <button type="button" class="btn btn-secundario h-11 flex-1" @click="cerrarTodo()">Cancelar</button>
+        <button type="submit" class="btn btn-primario h-11 flex-1" :disabled="guardando" x-text="guardando ? 'Guardando…' : (f.id ? 'Guardar cambios' : 'Crear usuario')"></button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Código de recuperación -->
+  <div x-show="codigo" x-cloak class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="t-codigo">
+    <button type="button" class="absolute inset-0 bg-black/40" aria-label="Cerrar" @click="cerrarTodo()" tabindex="-1"></button>
+    <div class="relative w-full max-w-md rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl" x-show="codigo">
+      <h2 id="t-codigo" class="font-titulo text-xl font-semibold">Código de recuperación</h2>
+      <p class="mt-1 text-sm text-gray-600">Para <span class="font-medium" x-text="codigo ? codigo.nombre : ''"></span> (@<span x-text="codigo ? codigo.usuario : ''"></span>). Compártelo en persona o por un canal privado.</p>
+      <p id="codigo-valor" class="mt-4 rounded-lg border border-borde bg-fondo py-4 text-center font-mono text-3xl font-semibold tracking-[0.25em]" x-text="codigo ? codigo.codigo : ''"></p>
+      <p class="mt-3 text-sm text-gray-600">Vale <span x-text="codigo ? codigo.minutos : ''"></span> minutos y se usa una sola vez. La persona lo escribe en <span class="font-medium">Iniciar sesión → ¿Olvidaste tu contraseña?</span> y elige una contraseña nueva.</p>
+      <p class="mt-1 text-xs text-gray-500">Se muestra solo ahora: no queda guardado en el sistema (solo su huella).</p>
+      <div class="mt-5 flex gap-3">
+        <button type="button" class="btn btn-secundario h-11 flex-1" @click="copiarCodigo()" x-text="copiado ? 'Copiado' : 'Copiar código'"></button>
+        <button type="button" class="btn btn-primario h-11 flex-1" @click="cerrarTodo()">Listo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmar desactivación -->
+  <div x-show="desactivar" x-cloak class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="t-desactivar">
+    <button type="button" class="absolute inset-0 bg-black/40" aria-label="Cerrar" @click="cerrarTodo()" tabindex="-1"></button>
+    <div class="relative w-full max-w-md rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl">
+      <h2 id="t-desactivar" class="font-titulo text-xl font-semibold">¿Desactivar a <span x-text="desactivar ? desactivar.nombre : ''"></span>?</h2>
+      <p class="mt-2 text-sm text-gray-600">Su sesión actual se cierra de inmediato y no podrá volver a entrar hasta que lo actives otra vez. Su historial se conserva.</p>
+      <div x-show="err" role="alert" class="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="err"></div>
+      <div class="mt-5 flex gap-3">
+        <button type="button" class="btn btn-secundario h-11 flex-1" @click="cerrarTodo()">Cancelar</button>
+        <button type="button" id="btn-confirmar-desactivar" class="btn btn-primario h-11 flex-1" :disabled="guardando" @click="confirmarDesactivar()" x-text="guardando ? 'Desactivando…' : 'Sí, desactivar'"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/configuracion.js"></script>

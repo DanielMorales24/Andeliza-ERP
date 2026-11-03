@@ -1,3 +1,3 @@
 const { crearRouter } = require('./entidad');
 
-module.exports = crearRouter(require('../controllers/proveedores'));
+module.exports = crearRouter(require('../controllers/proveedores'), null, 'proveedores');

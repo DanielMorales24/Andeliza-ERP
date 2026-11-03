@@ -1,0 +1,43 @@
+<script type="application/json" id="datos-pagina"><%- JSON.stringify(datos).replace(/</g, '\\u003c') %></script>
+<%- include('../partials/config_tabs', { seccion }) %>
+
+<div x-data="configAuditoria">
+  <div class="flex flex-wrap items-center gap-3">
+    <div class="relative min-w-[220px] flex-1 sm:max-w-md">
+      <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" x-model="busqueda" placeholder="Buscar en los últimos movimientos" aria-label="Buscar en la auditoría" class="campo h-11 pl-9" autocomplete="off">
+    </div>
+    <p class="text-sm text-gray-500">Últimos <span x-text="filas.length"></span> movimientos</p>
+    <button type="button" class="btn btn-secundario ml-auto h-11 px-5" :disabled="cargando" @click="actualizar()" x-text="cargando ? 'Actualizando…' : 'Actualizar'"></button>
+  </div>
+
+  <div class="mt-4 hidden overflow-hidden rounded-lg border border-borde bg-white md:block">
+    <table class="w-full text-left text-sm">
+      <thead class="bg-fondo text-xs uppercase tracking-wide text-gray-500">
+        <tr><th class="px-4 py-3 font-medium">Cuándo</th><th class="px-4 py-3 font-medium">Quién</th><th class="px-4 py-3 font-medium">Qué hizo</th><th class="px-4 py-3 font-medium">Desde</th></tr>
+      </thead>
+      <tbody class="divide-y divide-borde">
+        <template x-for="a in filtradas" :key="a.id">
+          <tr :class="a.accion === 'acceso_denegado' || a.accion === 'cuenta_bloqueada' ? 'bg-red-50/60' : ''">
+            <td class="whitespace-nowrap px-4 py-2.5 tabular-nums text-gray-600" x-text="a.fecha_texto"></td>
+            <td class="px-4 py-2.5 font-medium" x-text="a.usuario_nombre || 'Sistema'"></td>
+            <td class="px-4 py-2.5"><span x-text="a.descripcion"></span> <span class="ml-1 rounded bg-fondo px-1.5 py-0.5 font-mono text-[11px] text-gray-500" x-text="a.accion"></span></td>
+            <td class="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500" x-text="a.ip || '—'"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+    <p x-show="filtradas.length === 0" x-cloak class="px-4 py-8 text-center text-sm text-gray-500">No hay movimientos con esa búsqueda.</p>
+  </div>
+
+  <ul class="mt-4 space-y-2 md:hidden">
+    <template x-for="a in filtradas" :key="'m' + a.id">
+      <li class="rounded-lg border border-borde bg-white p-3 text-sm" :class="a.accion === 'acceso_denegado' || a.accion === 'cuenta_bloqueada' ? 'border-red-200' : ''">
+        <p class="font-medium" x-text="a.descripcion"></p>
+        <p class="mt-1 text-xs text-gray-500"><span x-text="a.usuario_nombre || 'Sistema'"></span> · <span x-text="a.fecha_texto"></span><span x-show="a.ip"> · <span x-text="a.ip"></span></span></p>
+      </li>
+    </template>
+  </ul>
+</div>
+
+<script src="/js/configuracion.js"></script>

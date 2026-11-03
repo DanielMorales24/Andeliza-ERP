@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const { requireAuth, soloRoles, requireFuncionalidad } = require('../middlewares/auth');
+const { requireAuth, requirePermiso, requireFuncionalidad } = require('../middlewares/auth');
 const { ErrorValidacion } = require('../utils/validar');
 const controlador = require('../controllers/inventario');
 
@@ -16,13 +16,13 @@ const subida = multer({
 });
 
 const router = express.Router();
-const guardas = [requireFuncionalidad('inventario'), requireAuth, soloRoles('admin')];
+const g = (accion) => [requireFuncionalidad('inventario'), requireAuth, requirePermiso('inventario', accion)];
 
-router.get('/', ...guardas, controlador.index);
-router.get('/nuevo', ...guardas, controlador.formulario);
-router.get('/:id(\\d+)/editar', ...guardas, controlador.formulario);
-router.post('/', ...guardas, subida.single('imagen'), controlador.guardar);
-router.post('/:id(\\d+)', ...guardas, subida.single('imagen'), controlador.guardar);
-router.patch('/:id(\\d+)/activo', ...guardas, controlador.cambiarActivo);
+router.get('/', ...g('ver'), controlador.index);
+router.get('/nuevo', ...g('crear'), controlador.formulario);
+router.get('/:id(\\d+)/editar', ...g('editar'), controlador.formulario);
+router.post('/', ...g('crear'), subida.single('imagen'), controlador.guardar);
+router.post('/:id(\\d+)', ...g('editar'), subida.single('imagen'), controlador.guardar);
+router.patch('/:id(\\d+)/activo', ...g('eliminar'), controlador.cambiarActivo);
 
 module.exports = router;

@@ -157,7 +157,7 @@ const SIN_ACENTOS = (col) => `translate(lower(${col}), 'áéíóúüñÁÉÍÓÚ
 
 // filtros: { desde, hasta (YYYY-MM-DD, inclusivos, hora del negocio), tipo, estado, q, offset, limite }
 async function listar(filtros) {
-  const { desde, hasta, tipo, estado, q, offset = 0, limite = 50 } = filtros;
+  const { desde, hasta, tipo, estado, q, offset = 0, limite = 50, soloUsuarioId = null } = filtros;
   const params = [];
   const cond = [];
   const param = (valor) => { params.push(valor); return '$' + params.length; };
@@ -167,6 +167,7 @@ async function listar(filtros) {
 
   if (desde) cond.push(`v.creado_en >= ((${param(desde)}::date)::timestamp AT TIME ZONE ${zona()})`);
   if (hasta) cond.push(`v.creado_en < (((${param(hasta)}::date + 1))::timestamp AT TIME ZONE ${zona()})`);
+  if (soloUsuarioId) cond.push(`v.usuario_id = ${param(soloUsuarioId)}`);   // quien solo ve lo propio
   if (tipo) cond.push(`v.tipo_documento = ${param(tipo)}`);
   if (estado) cond.push(`v.estado = ${param(estado)}`);
   if (q) {

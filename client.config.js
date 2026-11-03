@@ -34,7 +34,6 @@ module.exports = {
     compras: true,
     variantes: true,           // activado para este cliente
     productosCompuestos: true, // el uniforme completo
-    accesoQR: false,           // se activa en Fase 8
   },
 
   valoresPorDefecto: {

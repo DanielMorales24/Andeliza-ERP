@@ -25,7 +25,11 @@ async function index(req, res, next) {
       unidadesDecimales: unidadesDecimales(),
       usuarioId: req.user.id,
       hoy: hoyISO(),
-      permisos: { facturas: req.user.rol === 'admin' && config.funcionalidades.facturas === true },
+      permisos: {
+        facturas: req.user.tieneAlguno([['facturas', 'ver'], ['facturas', 'ver_propias']]) && config.funcionalidades.facturas === true,
+        crearCliente: req.user.tiene('clientes', 'crear'),
+        cobrar: req.user.tiene('pos', 'crear'),
+      },
     };
     res.render('pos/index', { titulo: 'Punto de venta', datos });
   } catch (err) {

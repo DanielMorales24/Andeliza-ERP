@@ -93,7 +93,7 @@
             <td class="whitespace-nowrap px-4 py-3 text-right">
               <a :href="'/facturas/' + fila.id + '/pdf'" target="_blank" rel="noopener" class="btn-texto">Ver PDF</a>
               <a :href="'/facturas/' + fila.id + '/pdf?descargar=1'" class="btn-texto apagar">Descargar</a>
-              <button type="button" class="btn-texto" x-show="fila.estado === 'P'" @click="pedirPago(fila)">Marcar pagada</button>
+              <button type="button" class="btn-texto" x-show="fila.estado === 'P' && (d.permisos || {}).marcarPagada" @click="pedirPago(fila)">Marcar pagada</button>
             </td>
           </tr>
         </template>
@@ -121,7 +121,7 @@
         <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-borde pt-3">
           <a :href="'/facturas/' + fila.id + '/pdf'" target="_blank" rel="noopener" class="btn btn-secundario h-11 flex-1">Ver PDF</a>
           <a :href="'/facturas/' + fila.id + '/pdf?descargar=1'" class="btn btn-secundario h-11 flex-1">Descargar</a>
-          <button type="button" class="btn btn-primario h-11 w-full" x-show="fila.estado === 'P'" @click="pedirPago(fila)">Marcar como pagada</button>
+          <button type="button" class="btn btn-primario h-11 w-full" x-show="fila.estado === 'P' && (d.permisos || {}).marcarPagada" @click="pedirPago(fila)">Marcar como pagada</button>
         </div>
       </article>
     </template>

@@ -1,17 +1,18 @@
 // Router estándar de un listado con modal: página + crear + editar + activar/desactivar.
+// Cada ruta exige su permiso sobre el módulo: ver (lista), crear, editar y eliminar (desactivar/reactivar).
 const express = require('express');
-const { requireAuth, soloRoles, requireFuncionalidad } = require('../middlewares/auth');
+const { requireAuth, requirePermiso, requireFuncionalidad } = require('../middlewares/auth');
 
 const pasar = (req, res, next) => next();
 
-function crearRouter(controlador, funcionalidad) {
+function crearRouter(controlador, funcionalidad, modulo) {
   const router = express.Router();
-  const guardas = [funcionalidad ? requireFuncionalidad(funcionalidad) : pasar, requireAuth, soloRoles('admin')];
+  const g = (accion) => [funcionalidad ? requireFuncionalidad(funcionalidad) : pasar, requireAuth, requirePermiso(modulo, accion)];
 
-  router.get('/', ...guardas, controlador.index);
-  router.post('/', ...guardas, controlador.crear);
-  router.put('/:id(\\d+)', ...guardas, controlador.actualizar);
-  router.patch('/:id(\\d+)/activo', ...guardas, controlador.cambiarActivo);
+  router.get('/', ...g('ver'), controlador.index);
+  router.post('/', ...g('crear'), controlador.crear);
+  router.put('/:id(\\d+)', ...g('editar'), controlador.actualizar);
+  router.patch('/:id(\\d+)/activo', ...g('eliminar'), controlador.cambiarActivo);
 
   return router;
 }

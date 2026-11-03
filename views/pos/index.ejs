@@ -160,7 +160,7 @@
                        @input="listaCliente = true; idxCliente = -1" @focus="listaCliente = true"
                        @keydown.arrow-down.prevent="moverCliente(1)" @keydown.arrow-up.prevent="moverCliente(-1)"
                        @keydown.enter.prevent="enterCliente()" @keydown.escape.stop="listaCliente = false">
-                <button type="button" class="btn btn-secundario h-11 flex-none px-3" @click="abrirNuevoCliente()">Nuevo</button>
+                <button type="button" class="btn btn-secundario h-11 flex-none px-3" x-show="(d.permisos || {}).crearCliente !== false" @click="abrirNuevoCliente()">Nuevo</button>
               </div>
               <ul id="pos-clientes-lista" role="listbox" x-show="listaCliente && qCliente.trim() !== ''" x-cloak
                   class="absolute inset-x-4 z-20 mt-1 max-h-64 overflow-auto rounded-md border border-borde bg-white py-1 shadow-lg">
@@ -175,7 +175,7 @@
                 </template>
                 <li x-show="resultadosCliente.length === 0" class="px-3 py-3 text-sm text-gray-600">
                   No hay clientes con «<span x-text="qCliente.trim()"></span>».
-                  <button type="button" class="font-medium text-primario hover:underline" @click="abrirNuevoCliente()">Crear cliente nuevo</button>
+                  <button type="button" class="font-medium text-primario hover:underline" x-show="(d.permisos || {}).crearCliente !== false" @click="abrirNuevoCliente()">Crear cliente nuevo</button>
                 </li>
               </ul>
               <p class="ayuda">Si no eliges cliente, la venta sale a nombre de Consumidor Final.</p>

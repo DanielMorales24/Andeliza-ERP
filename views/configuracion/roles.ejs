@@ -1,0 +1,134 @@
+<script type="application/json" id="datos-pagina"><%- JSON.stringify(datos).replace(/</g, '\\u003c') %></script>
+<%- include('../partials/config_tabs', { seccion }) %>
+
+<div x-data="configRoles" @keydown.escape.window="cerrarModales()" class="grid gap-6 lg:grid-cols-[18rem_1fr]">
+
+  <!-- Lista de roles -->
+  <aside aria-label="Roles">
+    <button type="button" id="btn-nuevo-rol" class="btn btn-primario h-11 w-full" @click="nuevoRol()">Nuevo rol</button>
+    <ul class="mt-3 space-y-2">
+      <template x-for="r in roles" :key="r.id">
+        <li>
+          <button type="button" @click="seleccionar(r.id)" :aria-current="sel && sel.id === r.id ? 'true' : null" :data-rol="r.nombre"
+                  class="w-full rounded-lg border px-4 py-3 text-left transition" :class="sel && sel.id === r.id ? 'border-primario bg-primario/5 ring-1 ring-primario' : 'border-borde bg-white hover:bg-fondo'">
+            <span class="flex items-center justify-between gap-2">
+              <span class="font-medium" x-text="r.nombre"></span>
+              <span class="flex gap-1">
+                <span x-show="r.es_sistema" class="insignia ins-neutra">De fábrica</span>
+                <span x-show="!r.activo" class="insignia ins-agotado">Inactivo</span>
+              </span>
+            </span>
+            <span class="mt-0.5 block text-xs text-gray-600" x-text="r.descripcion || 'Sin descripción'"></span>
+            <span class="mt-1 block text-xs text-gray-500"><span x-text="r.usuarios"></span> <span x-text="r.usuarios === 1 ? 'usuario' : 'usuarios'"></span> · <span x-text="r.permisos"></span> permisos</span>
+          </button>
+        </li>
+      </template>
+    </ul>
+  </aside>
+
+  <!-- Matriz de permisos -->
+  <section aria-label="Permisos del rol" x-show="sel" x-cloak>
+    <div class="flex flex-wrap items-start gap-3">
+      <div class="min-w-0 flex-1">
+        <h2 class="font-titulo text-2xl font-semibold" x-text="sel ? sel.nombre : ''"></h2>
+        <p class="text-sm text-gray-600" x-text="sel && sel.descripcion ? sel.descripcion : ''"></p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" class="btn btn-secundario h-10 px-4" id="btn-editar-rol" @click="editarRol()">Editar rol</button>
+        <button type="button" class="btn btn-secundario h-10 px-4" id="btn-eliminar-rol" x-show="sel && !sel.es_sistema" @click="pedirBorrar()">Eliminar</button>
+      </div>
+    </div>
+
+    <p x-show="esAdmin" class="mt-4 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">El administrador tiene control total y esto no se puede cambiar: así nunca se pierde el acceso al sistema.</p>
+    <p x-show="!esAdmin" class="mt-4 text-sm text-gray-600">Activa lo que este rol puede hacer. Para crear, editar o eliminar en un módulo también hace falta poder verlo. <span class="font-medium">Configuración</span> es solo del administrador.</p>
+
+    <div x-show="err" role="alert" class="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="err"></div>
+
+    <div class="mt-4 overflow-x-auto rounded-lg border border-borde bg-white">
+      <table class="w-full min-w-[560px] text-left text-sm" id="matriz-permisos">
+        <thead class="bg-fondo text-xs uppercase tracking-wide text-gray-500">
+          <tr>
+            <th scope="col" class="px-4 py-3 font-medium">Módulo</th>
+            <template x-for="a in acciones" :key="a.clave"><th scope="col" class="px-2 py-3 text-center font-medium" x-text="a.etiqueta"></th></template>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-borde">
+          <template x-for="fila in catalogo" :key="fila.modulo">
+            <tr :data-modulo="fila.modulo">
+              <th scope="row" class="px-4 py-3 font-medium" x-text="fila.etiqueta"></th>
+              <template x-for="a in acciones" :key="a.clave">
+                <td class="px-2 py-3 text-center">
+                  <template x-if="fila.permisos[a.clave]">
+                    <button type="button" role="switch" :aria-checked="tiene(fila, a.clave)" :aria-label="fila.etiqueta + ': ' + a.etiqueta"
+                            :data-permiso="fila.modulo + '.' + a.clave" :disabled="bloqueado(fila, a.clave)" @click="alternar(fila, a.clave)"
+                            class="relative inline-flex h-8 w-14 items-center rounded-full transition disabled:cursor-not-allowed"
+                            :class="[tiene(fila, a.clave) ? 'bg-primario' : 'bg-gray-300', bloqueado(fila, a.clave) ? 'opacity-50' : '']"
+                            :title="bloqueado(fila, a.clave) && fila.modulo === 'configuracion' && !esAdmin ? 'Solo el administrador' : ''">
+                      <span class="inline-block h-6 w-6 rounded-full bg-white shadow transition-transform" :class="tiene(fila, a.clave) ? 'translate-x-7' : 'translate-x-1'"></span>
+                    </button>
+                  </template>
+                  <span x-show="!fila.permisos[a.clave]" class="text-gray-300" aria-hidden="true">—</span>
+                </td>
+              </template>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mt-4 flex flex-wrap items-center justify-between gap-3" x-show="!esAdmin">
+      <p class="text-sm" :class="sucio ? 'font-medium text-amber-700' : 'text-gray-500'" x-text="sucio ? 'Tienes cambios sin guardar' : 'Sin cambios pendientes'"></p>
+      <div class="flex gap-2">
+        <button type="button" class="btn btn-secundario h-11 px-5" x-show="sucio" @click="descartar()">Descartar</button>
+        <button type="button" id="btn-guardar-permisos" class="btn btn-primario h-11 px-6" :disabled="!sucio || guardando" @click="guardarPermisos()" x-text="guardando ? 'Guardando…' : 'Guardar permisos'"></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Crear / editar rol -->
+  <div x-show="mr" x-cloak class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="t-rol">
+    <button type="button" class="absolute inset-0 bg-black/40" aria-label="Cerrar" @click="cerrarModales()" tabindex="-1"></button>
+    <form @submit.prevent="guardarRol()" class="relative max-h-full w-full max-w-md overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl">
+      <h2 id="t-rol" class="font-titulo text-xl font-semibold" x-text="fr.id ? 'Editar rol' : 'Nuevo rol'"></h2>
+      <div x-show="errRol" role="alert" class="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="errRol"></div>
+
+      <label for="r-nombre" class="etiqueta mt-4">Nombre del rol</label>
+      <input id="r-nombre" class="campo" x-model="fr.nombre" maxlength="40" required autocomplete="off" :disabled="fr.es_sistema">
+      <p x-show="fr.es_sistema" class="mt-1 text-xs text-gray-500">Los roles de fábrica no se renombran.</p>
+
+      <label for="r-desc" class="etiqueta mt-4">Descripción</label>
+      <input id="r-desc" class="campo" x-model="fr.descripcion" maxlength="200" autocomplete="off">
+
+      <div x-show="!fr.id">
+        <label for="r-copiar" class="etiqueta mt-4">Empezar con los permisos de</label>
+        <select id="r-copiar" class="campo" x-model="fr.copiar_de">
+          <option value="">Ninguno (sin permisos)</option>
+          <template x-for="r in roles" :key="r.id"><option :value="r.id" x-text="r.nombre"></option></template>
+        </select>
+      </div>
+
+      <label class="mt-4 flex items-center gap-2 text-sm" x-show="fr.id && !(fr.es_sistema && fr.nombre === 'admin')"><input type="checkbox" x-model="fr.activo"> Rol activo (si se desactiva, nadie puede iniciar sesión con él)</label>
+
+      <div class="mt-6 flex gap-3">
+        <button type="button" class="btn btn-secundario h-11 flex-1" @click="cerrarModales()">Cancelar</button>
+        <button type="submit" class="btn btn-primario h-11 flex-1" :disabled="guardandoRol" x-text="guardandoRol ? 'Guardando…' : (fr.id ? 'Guardar' : 'Crear rol')"></button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Confirmar eliminar -->
+  <div x-show="borrar" x-cloak class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="t-borrar">
+    <button type="button" class="absolute inset-0 bg-black/40" aria-label="Cerrar" @click="cerrarModales()" tabindex="-1"></button>
+    <div class="relative w-full max-w-md rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl">
+      <h2 id="t-borrar" class="font-titulo text-xl font-semibold">¿Eliminar el rol <span x-text="sel ? sel.nombre : ''"></span>?</h2>
+      <p class="mt-2 text-sm text-gray-600">Solo se puede eliminar si ningún usuario lo tiene asignado. Esto no se puede deshacer.</p>
+      <div x-show="errRol" role="alert" class="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="errRol"></div>
+      <div class="mt-5 flex gap-3">
+        <button type="button" class="btn btn-secundario h-11 flex-1" @click="cerrarModales()">Cancelar</button>
+        <button type="button" id="btn-confirmar-borrar" class="btn btn-primario h-11 flex-1" :disabled="guardandoRol" @click="confirmarBorrar()">Sí, eliminar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/configuracion.js"></script>

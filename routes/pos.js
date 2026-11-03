@@ -1,15 +1,14 @@
 const express = require('express');
-const { requireAuth, soloRoles, requireFuncionalidad } = require('../middlewares/auth');
+const { requireAuth, requirePermiso, requireFuncionalidad } = require('../middlewares/auth');
 const controlador = require('../controllers/pos');
 
 const router = express.Router();
-// El POS lo usan el administrador y el vendedor
-const guardas = [requireFuncionalidad('pos'), requireAuth, soloRoles('admin', 'vendedor')];
+const g = (modulo, accion) => [requireFuncionalidad('pos'), requireAuth, requirePermiso(modulo, accion)];
 
-router.get('/', ...guardas, controlador.index);
-router.get('/catalogo', ...guardas, controlador.catalogo);
-router.post('/clientes', ...guardas, controlador.crearCliente);
-router.post('/cobrar', ...guardas, controlador.cobrar);
-router.post('/cotizacion', ...guardas, controlador.cotizacion);
+router.get('/', ...g('pos', 'ver'), controlador.index);
+router.get('/catalogo', ...g('pos', 'ver'), controlador.catalogo);
+router.post('/clientes', ...g('clientes', 'crear'), controlador.crearCliente);   // alta rápida: es crear un cliente
+router.post('/cobrar', ...g('pos', 'crear'), controlador.cobrar);
+router.post('/cotizacion', ...g('pos', 'crear'), controlador.cotizacion);
 
 module.exports = router;

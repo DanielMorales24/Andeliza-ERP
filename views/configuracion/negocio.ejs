@@ -1,0 +1,112 @@
+<script type="application/json" id="datos-pagina"><%- JSON.stringify(datos).replace(/</g, '\\u003c') %></script>
+<%- include('../partials/config_tabs', { seccion }) %>
+
+<div x-data="configNegocio" class="grid gap-6 xl:grid-cols-2">
+
+  <!-- Datos del negocio -->
+  <form @submit.prevent="guardarNegocio()" class="rounded-lg border border-borde bg-white p-5" aria-labelledby="t-negocio">
+    <h2 id="t-negocio" class="font-titulo text-xl font-semibold">Datos del negocio</h2>
+    <p class="mt-1 text-sm text-gray-600">Salen en las facturas, los comprobantes y los reportes en PDF.</p>
+
+    <div x-show="errN" x-cloak role="alert" class="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="errN"></div>
+
+    <div class="mt-5 flex items-center gap-4">
+      <div class="flex h-20 w-20 flex-none items-center justify-center overflow-hidden rounded-lg border border-borde bg-fondo">
+        <img x-show="logoVista" :src="logoVista" alt="Logo del negocio" class="h-full w-full object-contain" @error="logoVista = ''">
+        <span x-show="!logoVista" class="px-1 text-center text-xs text-gray-500">Sin logo</span>
+      </div>
+      <div class="min-w-0">
+        <label class="btn btn-secundario h-10 cursor-pointer">
+          <span x-text="logoVista ? 'Cambiar logo' : 'Subir logo'"></span>
+          <input id="logo" type="file" accept="image/png,image/jpeg" class="sr-only" @change="elegirLogo($event)">
+        </label>
+        <button type="button" class="btn-texto ml-2" x-show="logoVista && (n.logoPropio || logoArchivo)" @click="quitarLogoActual()">Quitar</button>
+        <p class="mt-1 text-xs text-gray-500">PNG o JPG, hasta 3 MB.</p>
+      </div>
+    </div>
+
+    <div class="mt-5 grid gap-4 sm:grid-cols-2">
+      <div class="sm:col-span-2">
+        <label for="n-nombre" class="etiqueta">Nombre del negocio</label>
+        <input id="n-nombre" class="campo" x-model="n.nombre" maxlength="150" required autocomplete="off">
+      </div>
+      <div>
+        <label for="n-rtn" class="etiqueta">RTN</label>
+        <input id="n-rtn" class="campo" inputmode="numeric" x-model="n.rtn" maxlength="20" autocomplete="off" placeholder="14 dígitos (opcional)">
+      </div>
+      <div>
+        <label for="n-telefono" class="etiqueta">Teléfono</label>
+        <input id="n-telefono" class="campo" type="tel" inputmode="tel" x-model="n.telefono" maxlength="40" autocomplete="off">
+      </div>
+      <div class="sm:col-span-2">
+        <label for="n-direccion" class="etiqueta">Dirección</label>
+        <input id="n-direccion" class="campo" x-model="n.direccion" maxlength="255" autocomplete="off">
+      </div>
+      <div class="sm:col-span-2">
+        <label for="n-correo" class="etiqueta">Correo</label>
+        <input id="n-correo" class="campo" type="email" inputmode="email" x-model="n.correo" maxlength="150" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="mt-6 flex justify-end">
+      <button type="submit" class="btn btn-primario h-11 px-6" :disabled="guardandoN" x-text="guardandoN ? 'Guardando…' : 'Guardar datos'"></button>
+    </div>
+  </form>
+
+  <!-- Facturación: SAR o interna -->
+  <form @submit.prevent="guardarFacturacion()" class="rounded-lg border border-borde bg-white p-5" aria-labelledby="t-fact">
+    <h2 id="t-fact" class="font-titulo text-xl font-semibold">Facturación</h2>
+    <p class="mt-1 text-sm text-gray-600">Si el negocio no está afiliado al SAR, se factura con comprobantes internos numerados.</p>
+
+    <div class="mt-5 flex items-center justify-between gap-4 rounded-lg border border-borde bg-fondo px-4 py-3">
+      <div class="min-w-0">
+        <p class="font-medium" id="et-sar">Facturar con CAI del SAR</p>
+        <p class="text-sm text-gray-600" x-text="sar ? 'Las ventas nuevas salen como factura fiscal con CAI.' : 'Las ventas nuevas salen como comprobante interno.'"></p>
+      </div>
+      <button type="button" role="switch" id="sw-sar" :aria-checked="sar" aria-labelledby="et-sar" @click="sar = !sar"
+              class="relative inline-flex h-8 w-14 flex-none items-center rounded-full transition" :class="sar ? 'bg-primario' : 'bg-gray-300'">
+        <span class="inline-block h-6 w-6 rounded-full bg-white shadow transition-transform" :class="sar ? 'translate-x-7' : 'translate-x-1'"></span>
+      </button>
+    </div>
+
+    <p class="mt-3 text-sm" x-show="modoTexto" x-text="modoTexto"></p>
+
+    <div x-show="errF" x-cloak role="alert" class="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="errF"></div>
+
+    <div x-show="sar" x-cloak class="mt-5 grid gap-4 sm:grid-cols-2">
+      <div class="sm:col-span-2">
+        <label for="f-cai" class="etiqueta">CAI</label>
+        <input id="f-cai" class="campo font-mono uppercase" x-model="f.cai" maxlength="37" autocomplete="off" spellcheck="false" placeholder="XXXXXX-XXXXXX-XXXXXX-XXXXXX-XXXXXX-XX">
+      </div>
+      <div>
+        <label for="f-inicio" class="etiqueta">Rango autorizado: desde</label>
+        <input id="f-inicio" class="campo tabular-nums" inputmode="numeric" x-model="f.rango_inicio" maxlength="10" autocomplete="off">
+      </div>
+      <div>
+        <label for="f-fin" class="etiqueta">Rango autorizado: hasta</label>
+        <input id="f-fin" class="campo tabular-nums" inputmode="numeric" x-model="f.rango_fin" maxlength="10" autocomplete="off">
+      </div>
+      <div>
+        <label for="f-fecha" class="etiqueta">Fecha límite de emisión</label>
+        <input id="f-fecha" class="campo" type="date" x-model="f.fecha_limite" :min="d.hoy">
+      </div>
+      <div>
+        <label for="f-tasa" class="etiqueta">Impuesto (%)</label>
+        <input id="f-tasa" class="campo tabular-nums" inputmode="decimal" x-model="f.tasa" maxlength="6" autocomplete="off">
+      </div>
+      <div class="sm:col-span-2">
+        <label for="f-pie" class="etiqueta">Pie legal (opcional)</label>
+        <input id="f-pie" class="campo" x-model="f.pie_legal" maxlength="500" autocomplete="off">
+      </div>
+      <p class="text-sm text-gray-600 sm:col-span-2" x-show="d.fiscal && d.fiscal.cai === f.cai.trim().toUpperCase()">
+        Último número usado de este CAI: <span class="font-medium tabular-nums" x-text="d.fiscal ? d.fiscal.numeroActual : ''"></span>. No se cambia, para que nunca se repita un número.
+      </p>
+    </div>
+
+    <div class="mt-6 flex justify-end">
+      <button type="submit" class="btn btn-primario h-11 px-6" :disabled="guardandoF" x-text="guardandoF ? 'Guardando…' : 'Guardar facturación'"></button>
+    </div>
+  </form>
+</div>
+
+<script src="/js/configuracion.js"></script>

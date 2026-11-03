@@ -8,6 +8,7 @@
   <div class="ml-auto flex items-center gap-3">
     <span class="hidden text-sm font-medium sm:inline"><%= usuarioActual.nombre %></span>
     <span class="hidden rounded bg-fondo px-2 py-0.5 text-xs text-gray-600 sm:inline"><%= usuarioActual.rol %></span>
+    <a href="/cambiar-contrasena" class="hidden rounded px-2 py-1.5 text-sm text-gray-600 hover:bg-fondo hover:text-tinta md:inline">Cambiar contraseña</a>
     <form method="post" action="/logout">
       <button type="submit" class="rounded border border-borde px-3 py-1.5 text-sm font-medium hover:bg-fondo">Salir</button>
     </form>

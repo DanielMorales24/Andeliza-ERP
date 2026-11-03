@@ -54,8 +54,12 @@ function darFormato(filas) {
   }));
 }
 
-async function consultar(filtros) {
-  const r = await Ventas.listar({ ...filtros, limite: TAMANO_PAGINA });
+// Regla de propiedad del dato: con "facturas.ver" se ven todas; con solo "facturas.ver_propias",
+// únicamente las que la misma persona emitió (el filtro se aplica en la consulta, no en la pantalla).
+const soloLoPropio = (req) => !req.user.tiene('facturas', 'ver');
+
+async function consultar(filtros, soloPropias, soloPropiasId) {
+  const r = await Ventas.listar({ ...filtros, limite: TAMANO_PAGINA, soloUsuarioId: soloPropias ? soloPropiasId : null });
   return {
     filas: darFormato(r.filas),
     hayMas: r.hayMas,
@@ -67,10 +71,12 @@ async function index(req, res, next) {
   try {
     const filtros = leerFiltros(req.query, false);
     const datos = {
-      ...(await consultar(filtros)),
+      ...(await consultar(filtros, soloLoPropio(req), req.user.id)),
       filtros,
       hoy: hoyISO(),
       tamanoPagina: TAMANO_PAGINA,
+      // La interfaz solo muestra lo que el servidor además permitirá hacer
+      permisos: { marcarPagada: req.user.tiene('facturas', 'editar'), soloPropias: soloLoPropio(req) },
     };
     res.render('facturas/index', { titulo: 'Facturas', datos });
   } catch (err) {
@@ -81,7 +87,7 @@ async function index(req, res, next) {
 async function datos(req, res, next) {
   try {
     const filtros = leerFiltros(req.query, true);
-    res.json({ ok: true, ...(await consultar(filtros)) });
+    res.json({ ok: true, ...(await consultar(filtros, soloLoPropio(req), req.user.id)) });
   } catch (err) {
     next(err);
   }
@@ -97,11 +103,12 @@ async function marcarPagada(req, res, next) {
   }
 }
 
-// PDF de una venta. El vendedor solo puede ver las que él cobró.
+// PDF de una venta. Con "facturas.ver" se descargan todas; sin él (por ejemplo el vendedor, que
+// imprime al cobrar), solo las que la misma persona emitió. Una ajena responde 404, no 403, para no confirmar que existe.
 async function pdf(req, res, next) {
   try {
     const venta = await Ventas.obtener(Number(req.params.id));
-    if (!venta || (req.user.rol !== 'admin' && venta.usuario_id !== req.user.id)) {
+    if (!venta || (!req.user.tiene('facturas', 'ver') && venta.usuario_id !== req.user.id)) {
       return res.status(404).render('errores/404', { layout: 'layouts/auth', titulo: 'No encontrada' });
     }
     const documento = await Documentos.documentoDeVenta(venta);

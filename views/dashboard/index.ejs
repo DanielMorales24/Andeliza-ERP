@@ -1,6 +1,6 @@
 <%
   const plural = (n, uno, varios) => n + ' ' + (n === 1 ? uno : varios);
-  const hay = (clave) => modulosVisibles(usuarioActual.rol).some((m) => m.clave === clave);
+  const hay = (clave) => modulosVisibles(usuarioActual).some((m) => m.clave === clave);
 
   const tarjetas = [
     { etiqueta: 'Ventas de hoy',       valor: dinero(resumen.ventasDia),       detalle: plural(resumen.cantidadDia, 'venta', 'ventas') },

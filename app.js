@@ -9,7 +9,7 @@ const config = require('./client.config');
 const db = require('./db');
 const formato = require('./utils/formato');
 const { manejarErrores } = require('./utils/errores');
-const { modulosVisibles } = require('./modulos');
+const { modulosVisibles, rutaInicial } = require('./modulos');
 
 const enProduccion = process.env.NODE_ENV === 'production';
 if (enProduccion && !process.env.SESSION_SECRET) {
@@ -46,6 +46,7 @@ app.locals.config = config;
 app.locals.dinero = formato.dinero;
 app.locals.fecha = formato.fecha;
 app.locals.modulosVisibles = modulosVisibles;
+app.locals.rutaInicial = rutaInicial;
 
 app.use((req, res, next) => {
   res.locals.rutaActual = req.path;
@@ -87,6 +88,7 @@ app.use('/inventario', require('./routes/inventario'));
 app.use('/categorias', require('./routes/categorias'));
 app.use('/clientes', require('./routes/clientes'));
 app.use('/proveedores', require('./routes/proveedores'));
+app.use('/configuracion', require('./routes/configuracion'));   // Fase 7 (antes que las Estadísticas: ver docs/bitacora/semana-4.md)
 // Rutas de módulos pendientes. Cada fase pone su router real ANTES de esta línea.
 app.use('/', require('./routes/modulos'));
 

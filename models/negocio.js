@@ -8,7 +8,15 @@ const config = require('../client.config');
 
 const NOMBRE_POR_DEFECTO_DB = 'Mi Negocio'; // valor que trae schema_es.sql si nadie lo editó
 
+// Sin caché a propósito: en Vercel cada instancia tendría la suya y, tras guardar en Configuración,
+// otra instancia podría seguir mostrando el nombre viejo. Es una lectura por llave primaria.
+function invalidar() { /* nada que invalidar; se deja para no cambiar quién lo llama */ }
+
 async function obtener() {
+  return leerNegocio();
+}
+
+async function leerNegocio() {
   const base = config.negocio;
   let fila = {};
   try {
@@ -109,4 +117,67 @@ async function logo(url) {
   return buffer;
 }
 
-module.exports = { obtener, fiscalActiva, fiscalPorCai, tasaImpuesto, modoFacturacion, logo };
+// ---------- Edición desde Configuración (Fase 7) ----------
+
+// Lo que hay en la base tal cual (para que el formulario muestre lo guardado)
+async function obtenerCrudo() {
+  const { rows } = await db.query('SELECT nombre, logo_url, rtn, direccion, telefono, correo FROM configuracion_negocio WHERE id = 1');
+  return rows[0] || {};
+}
+
+async function actualizar(d) {
+  await db.query(
+    `UPDATE configuracion_negocio SET nombre = $1, rtn = $2, direccion = $3, telefono = $4, correo = $5, logo_url = $6 WHERE id = 1`,
+    [d.nombre, d.rtn || null, d.direccion || null, d.telefono || null, d.correo || null, d.logoUrl || null]
+  );
+  invalidar();
+}
+
+// La configuración fiscal que se muestra en el formulario: la activa, o la última que hubo
+async function fiscalParaFormulario() {
+  const { rows } = await db.query(
+    `SELECT id, ${COLUMNAS_FISCAL}, activo FROM configuracion_fiscal ORDER BY activo DESC, id DESC LIMIT 1`
+  );
+  return rows[0] || null;
+}
+
+// Apaga el modo SAR (las facturas nuevas pasan a ser comprobantes internos). El historial se conserva.
+async function apagarFiscal() {
+  const { rowCount } = await db.query('UPDATE configuracion_fiscal SET activo = FALSE WHERE activo');
+  return rowCount > 0;
+}
+
+// Enciende el modo SAR con un CAI. Si el CAI es el mismo que ya existe, se actualizan sus datos
+// sin tocar el número en curso (así nunca se repite un número de factura). Si es otro CAI,
+// o cambió el inicio del rango, se crea uno nuevo que arranca en su primer número.
+async function guardarFiscal(d) {
+  return db.transaccion(async (cx) => {
+    await cx.query('SELECT 1 FROM configuracion_negocio WHERE id = 1 FOR UPDATE');   // serializa cambios simultáneos
+    const previa = (await cx.query('SELECT * FROM configuracion_fiscal WHERE cai = $1 ORDER BY id DESC LIMIT 1', [d.cai])).rows[0];
+
+    await cx.query('UPDATE configuracion_fiscal SET activo = FALSE WHERE activo AND (id IS DISTINCT FROM $1)', [previa ? previa.id : null]);
+
+    if (previa && previa.rango_inicio === d.rangoInicio) {
+      if (d.rangoFin < previa.numero_actual) {
+        throw new (require('../utils/validar').ErrorValidacion)(`El fin del rango no puede ser menor que el último número usado (${previa.numero_actual}).`);
+      }
+      await cx.query(
+        `UPDATE configuracion_fiscal SET rango_fin = $1, fecha_limite = $2, tasa_impuesto = $3, pie_legal = $4, activo = TRUE WHERE id = $5`,
+        [d.rangoFin, d.fechaLimite, d.tasa, d.pieLegal || null, previa.id]
+      );
+      return { id: previa.id, nuevo: false };
+    }
+
+    const ins = await cx.query(
+      `INSERT INTO configuracion_fiscal (cai, rango_inicio, rango_fin, numero_actual, fecha_limite, tasa_impuesto, moneda, pie_legal, activo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE) RETURNING id`,
+      [d.cai, d.rangoInicio, d.rangoFin, d.rangoInicio - 1, d.fechaLimite, d.tasa, config.valoresPorDefecto.moneda || 'L', d.pieLegal || null]
+    );
+    return { id: ins.rows[0].id, nuevo: true };
+  });
+}
+
+module.exports = {
+  obtener, fiscalActiva, fiscalPorCai, tasaImpuesto, modoFacturacion, logo,
+  obtenerCrudo, actualizar, fiscalParaFormulario, apagarFiscal, guardarFiscal, invalidar,
+};
