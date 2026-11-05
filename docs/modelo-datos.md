@@ -2,7 +2,7 @@
 
 Modelo relacional de Andeliza ERP en PostgreSQL (Supabase). Cubre las Fases 1 a 4: acceso y configuración, catálogo e inventario, clientes y proveedores, ventas y facturación, compras, cartera y contabilidad por partida doble.
 
-> Este documento se generó leyendo el catálogo de una base real creada con `db/migrations/01` a `04`, `db/functions.sql` y `db/seed.sql`, así que coincide con los scripts. La base tiene **22 tablas**, **2 vistas**, **208 columnas** y **33 claves foráneas**.
+> Este documento se generó leyendo el catálogo de una base real creada con `db/migrations/01` a `05`, `db/functions.sql` y `db/seed.sql`, así que coincide con los scripts. La base tiene **26 tablas**, **2 vistas**, **237 columnas** y **37 claves foráneas**.
 
 ## Decisiones de modelado
 
@@ -25,7 +25,23 @@ erDiagram
         bigint id PK
         varchar nombre
         varchar usuario UK
-        varchar rol
+        bigint rol_id FK
+    }
+    roles {
+        bigint id PK
+        varchar nombre
+    }
+    permisos {
+        bigint id PK
+    }
+    roles_permisos {
+        bigint rol_id PK, FK
+        bigint permiso_id PK, FK
+    }
+    recuperacion_contrasena {
+        bigint id PK
+        bigint usuario_id FK
+        varchar codigo
     }
     configuracion_negocio {
         int id PK
@@ -169,6 +185,10 @@ erDiagram
         numeric debe
         numeric haber
     }
+    roles ||--o{ usuarios : "rol_id"
+    permisos ||--o{ roles_permisos : "permiso_id"
+    roles ||--o{ roles_permisos : "rol_id"
+    usuarios ||--o{ recuperacion_contrasena : "usuario_id"
     categorias |o--o{ productos : "categoria_id"
     proveedores |o--o{ productos : "proveedor_id"
     productos ||--o{ variantes_producto : "producto_id"
@@ -210,7 +230,7 @@ Lectura: `||` indica "exactamente uno", `|o` "cero o uno" (la clave foránea adm
 
 | Dominio | Tablas |
 |---|---|
-| Acceso y configuración | `usuarios`, `configuracion_negocio`, `configuracion_fiscal`, `codigos_temporales`, `auditoria` |
+| Acceso y configuración | `usuarios`, `roles`, `permisos`, `roles_permisos`, `recuperacion_contrasena`, `configuracion_negocio`, `configuracion_fiscal`, `codigos_temporales`, `auditoria` |
 | Catálogo e inventario | `categorias`, `productos`, `variantes_producto`, `componentes_producto` |
 | Terceros | `clientes`, `proveedores` |
 | Ventas y facturación | `ventas`, `detalle_venta` |
@@ -222,11 +242,15 @@ Lectura: `||` indica "exactamente uno", `|o` "cero o uno" (la clave foránea adm
 
 | Tabla | PK | FK → destino (ON DELETE) | Restricciones | Propósito |
 |---|---|---|---|---|
-| `usuarios` | `id` | — | UNIQUE `usuario`<br>CHECK `(rol IN ('admin', 'vendedor'))` | Cuentas de acceso. Cada una tiene un rol (administrador o vendedor). |
+| `usuarios` | `id` | `rol_id` → `roles` (NO ACTION) | UNIQUE `usuario`<br>CHECK `((contrasena) ~ '^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$')` | Cuentas de acceso. Cada una tiene un rol (tabla roles); la contraseña se guarda con bcrypt y la cuenta se bloquea tras intentos fallidos. |
+| `roles` | `id` | — | — | Roles de usuario. Cuatro de fábrica (admin, supervisor, vendedor, contador) y los que cree el administrador. |
+| `permisos` | `id` | — | UNIQUE `modulo,accion` | Catálogo de permisos: un módulo y una acción (por ejemplo pos + crear). "ver_propias" es ver solo lo que uno mismo generó. |
+| `roles_permisos` | `rol_id, permiso_id` | `permiso_id` → `permisos` (CASCADE)<br>`rol_id` → `roles` (CASCADE) | — | Qué permisos tiene cada rol. Un trigger impide dar permisos de Configuración a otro rol que no sea admin. |
+| `recuperacion_contrasena` | `id` | `usuario_id` → `usuarios` (CASCADE) | — | Códigos temporales de recuperación de contraseña (un solo uso, 30 minutos). Guarda el hash del código, no el código. |
 | `configuracion_negocio` | `id` | — | CHECK `(id = 1)` | Datos del negocio y contadores internos. Tabla de una sola fila. |
 | `configuracion_fiscal` | `id` | — | UNIQUE `activo (solo donde activo)`<br>CHECK `((numero_actual >= (rango_inicio - 1)) AND (numero_actual <= rango_fin))`<br>CHECK `(rango_fin >= rango_inicio)` | CAI del SAR con su rango autorizado, fecha límite y tasa de impuesto. |
-| `codigos_temporales` | `id` | — | — | Códigos temporales de un solo uso con vencimiento, previstos para el acceso móvil con QR (Fase 8). |
-| `auditoria` | `id` | — | — | Bitácora de acciones críticas (por ejemplo, cada venta creada). |
+| `codigos_temporales` | `id` | — | — | Tabla de la Fase 1 que hoy no usa ninguna pantalla: códigos temporales de un solo uso con vencimiento. No es la de recuperación de contraseña (esa es recuperacion_contrasena). |
+| `auditoria` | `id` | — | — | Bitácora de solo agregar: quién hizo qué, cuándo y desde dónde (inicios de sesión, usuarios, roles, finanzas, ventas). No se modifica ni se borra. |
 | `categorias` | `id` | — | UNIQUE `nombre` | Agrupan los productos. |
 | `productos` | `id` | `categoria_id` → `categorias` (SET NULL)<br>`proveedor_id` → `proveedores` (SET NULL) | UNIQUE `sku` | Catálogo: precios, costo, stock, unidad y kits. |
 | `variantes_producto` | `id` | `producto_id` → `productos` (CASCADE) | UNIQUE `producto_id,nombre_variante`<br>UNIQUE `sku` | Variantes de un producto (talla, equipo) con stock propio. |
@@ -260,19 +284,77 @@ Las columnas `usuario_id` de las tablas financieras y de `auditoria` no tienen F
 
 ### `usuarios`
 
-Cuentas de acceso. Cada una tiene un rol (administrador o vendedor).
+Cuentas de acceso. Cada una tiene un rol (tabla roles); la contraseña se guarda con bcrypt y la cuenta se bloquea tras intentos fallidos.
 
 | Columna | Tipo | Nulo | Por defecto | Restricciones | Descripción |
 |---|---|---|---|---|---|
 | `id` | `bigint` | No | `nextval('usuarios_id_seq'::regclass)` | PK | Identificador. |
 | `nombre` | `varchar(150)` | No | — | — | Nombre completo. |
 | `usuario` | `varchar(60)` | No | — | UNIQUE | Nombre de usuario para iniciar sesión (único, sin distinguir mayúsculas). |
-| `contrasena` | `varchar(255)` | No | — | — | Contraseña. Se guarda en texto plano por ahora: deuda de seguridad conocida, se corrige en la Fase 7. |
-| `rol` | `varchar(10)` | No | `'vendedor'` | — | admin o vendedor. |
+| `contrasena` | `varchar(255)` | No | — | — | Hash bcrypt de la contraseña (pgcrypto). La base rechaza guardar texto plano. |
 | `activo` | `boolean` | No | `true` | — | TRUE si está en uso. Se desactiva en lugar de borrar. |
 | `creado_en` | `timestamptz` | No | `now()` | — | Fecha y hora de creación. |
+| `rol_id` | `bigint` | No | — | FK → roles(id), ON DELETE NO ACTION | Rol de la cuenta (referencia a roles). |
+| `debe_cambiar_contrasena` | `boolean` | No | `false` | — | TRUE obliga a cambiar la contraseña en el primer inicio de sesión. |
+| `intentos_fallidos` | `int` | No | `0` | — | Intentos fallidos seguidos de inicio de sesión (5 bloquean la cuenta). |
+| `bloqueado_hasta` | `timestamptz` | Sí | — | — | Hasta cuándo está bloqueada la cuenta por intentos fallidos. |
+| `sesion_version` | `int` | No | `1` | — | Sube al desactivar la cuenta o cambiar la contraseña; cierra todas las sesiones abiertas de la persona. |
+| `ultimo_acceso` | `timestamptz` | Sí | — | — | Fecha y hora del último inicio de sesión correcto. |
+| `contrasena_cambiada_en` | `timestamptz` | Sí | — | — | Cuándo se cambió la contraseña por última vez. |
 
-Restricciones de la tabla: CHECK `(rol IN ('admin', 'vendedor'))`.
+Restricciones de la tabla: CHECK `((contrasena) ~ '^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$')`.
+
+### `roles`
+
+Roles de usuario. Cuatro de fábrica (admin, supervisor, vendedor, contador) y los que cree el administrador.
+
+| Columna | Tipo | Nulo | Por defecto | Restricciones | Descripción |
+|---|---|---|---|---|---|
+| `id` | `bigint` | No | `nextval('roles_id_seq'::regclass)` | PK | Identificador. |
+| `nombre` | `varchar(40)` | No | — | — | Nombre del rol (único, sin distinguir mayúsculas). |
+| `descripcion` | `varchar(200)` | Sí | — | — | Para qué sirve el rol. |
+| `activo` | `boolean` | No | `true` | — | Si se desactiva, nadie puede iniciar sesión con ese rol. |
+| `es_sistema` | `boolean` | No | `false` | — | TRUE en los cuatro roles de fábrica: no se renombran ni se eliminan. |
+| `creado_en` | `timestamptz` | No | `now()` | — | Fecha y hora de creación. |
+
+### `permisos`
+
+Catálogo de permisos: un módulo y una acción (por ejemplo pos + crear). "ver_propias" es ver solo lo que uno mismo generó.
+
+| Columna | Tipo | Nulo | Por defecto | Restricciones | Descripción |
+|---|---|---|---|---|---|
+| `id` | `bigint` | No | `nextval('permisos_id_seq'::regclass)` | PK | Identificador. |
+| `modulo` | `varchar(30)` | No | — | — | Módulo: dashboard, pos, inventario, clientes, proveedores, facturas, finanzas, estadisticas o configuracion. |
+| `accion` | `varchar(20)` | No | — | — | ver, crear, editar, eliminar o ver_propias. |
+| `descripcion` | `varchar(200)` | Sí | — | — | Qué permite hacer. |
+
+Restricciones de la tabla: UNIQUE `modulo,accion`.
+
+### `roles_permisos`
+
+Qué permisos tiene cada rol. Un trigger impide dar permisos de Configuración a otro rol que no sea admin.
+
+| Columna | Tipo | Nulo | Por defecto | Restricciones | Descripción |
+|---|---|---|---|---|---|
+| `rol_id` | `bigint` | No | — | FK → roles(id), ON DELETE CASCADE | Rol que recibe el permiso. |
+| `permiso_id` | `bigint` | No | — | FK → permisos(id), ON DELETE CASCADE | Permiso concedido. |
+
+Triggers: `trg_roles_permisos_configuracion`.
+
+### `recuperacion_contrasena`
+
+Códigos temporales de recuperación de contraseña (un solo uso, 30 minutos). Guarda el hash del código, no el código.
+
+| Columna | Tipo | Nulo | Por defecto | Restricciones | Descripción |
+|---|---|---|---|---|---|
+| `id` | `bigint` | No | `nextval('recuperacion_contrasena_id_seq'::regclass)` | PK | Identificador. |
+| `usuario_id` | `bigint` | No | — | FK → usuarios(id), ON DELETE CASCADE | Usuario al que pertenece el código. |
+| `codigo` | `varchar(64)` | No | — | — | Hash SHA-256 del código (el código en claro solo se muestra una vez al administrador). |
+| `expiracion` | `timestamptz` | No | — | — | Momento en que el código vence (30 minutos). |
+| `usado` | `boolean` | No | `false` | — | TRUE cuando ya se usó o fue reemplazado por otro. |
+| `creado_por` | `bigint` | Sí | — | — | Administrador que generó el código. |
+| `creado_en` | `timestamptz` | No | `now()` | — | Cuándo se generó. |
+| `usado_en` | `timestamptz` | Sí | — | — | Cuándo se usó. |
 
 ### `configuracion_negocio`
 
@@ -319,7 +401,7 @@ El índice único parcial sobre `activo` garantiza que solo exista **una** confi
 
 ### `codigos_temporales`
 
-Códigos temporales de un solo uso con vencimiento, previstos para el acceso móvil con QR (Fase 8).
+Tabla de la Fase 1 que hoy no usa ninguna pantalla: códigos temporales de un solo uso con vencimiento. No es la de recuperación de contraseña (esa es recuperacion_contrasena).
 
 | Columna | Tipo | Nulo | Por defecto | Restricciones | Descripción |
 |---|---|---|---|---|---|
@@ -330,7 +412,7 @@ Códigos temporales de un solo uso con vencimiento, previstos para el acceso mó
 
 ### `auditoria`
 
-Bitácora de acciones críticas (por ejemplo, cada venta creada).
+Bitácora de solo agregar: quién hizo qué, cuándo y desde dónde (inicios de sesión, usuarios, roles, finanzas, ventas). No se modifica ni se borra.
 
 | Columna | Tipo | Nulo | Por defecto | Restricciones | Descripción |
 |---|---|---|---|---|---|
@@ -341,6 +423,11 @@ Bitácora de acciones críticas (por ejemplo, cada venta creada).
 | `entidad_id` | `bigint` | Sí | — | — | Id del registro afectado. |
 | `detalles` | `jsonb` | Sí | — | — | Datos adicionales en JSON. |
 | `creado_en` | `timestamptz` | No | `now()` | — | Fecha y hora de creación. |
+| `usuario_nombre` | `varchar(150)` | Sí | — | — | Nombre de quien actuó, copiado al momento (queda aunque luego cambie de nombre). |
+| `descripcion` | `text` | Sí | — | — | La acción escrita en español, por ejemplo "Creó al usuario carla con el rol vendedor". |
+| `ip` | `varchar(64)` | Sí | — | — | Dirección IP desde donde se hizo. |
+
+Triggers: `trg_auditoria_completar`, `trg_auditoria_inmutable`.
 
 ### `categorias`
 
@@ -671,25 +758,40 @@ Las reglas críticas viven en la base de datos para que cada operación sea ató
 
 | Función | Qué hace |
 |---|---|
+| `actualizar_rol` | Edita un rol; los de fábrica no se renombran ni el admin se desactiva. |
+| `actualizar_usuario` | Cambia nombre y rol; nunca deja al sistema sin administrador activo. |
 | `anular_abono_cliente` | Anula un abono y reabre la deuda. |
 | `anular_gasto` | Anula un gasto sin pagos. |
 | `anular_ingreso` | Anula un ingreso sin cobros. |
 | `anular_pago_proveedor` | Anula un pago y reabre la deuda. |
 | `anular_partida` | Crea la contrapartida (Debe y Haber invertidos) de una partida. |
 | `anular_partida_manual` | Anula solo asientos manuales y ajustes. |
+| `autenticar_usuario` | Inicio de sesión: verifica la contraseña, bloquea tras 5 fallos (15 minutos) y devuelve el motivo si no entra. |
+| `bloquear_cambios_auditoria` | Trigger: la auditoría no se modifica ni se borra. |
 | `bloquear_cambios_partidas` | Trigger: impide modificar o borrar partidas y sus líneas. |
+| `cambiar_contrasena` | La persona cambia su propia contraseña (pide la actual). |
+| `cambiar_estado_usuario` | Activa o desactiva una cuenta; al desactivar cierra sus sesiones. |
+| `completar_auditoria` | Trigger: completa el nombre de quien actuó y una descripción. |
 | `conciliar_inventario` | Iguala el inventario del libro con las existencias. |
 | `contabilizar_venta` | Genera la partida de una venta (la llama crear_venta). |
 | `crear_partida` | Único camino para escribir en el libro diario: valida y numera la partida. |
+| `crear_rol` | Crea un rol, opcionalmente copiando los permisos de otro. |
+| `crear_usuario` | Crea un usuario con contraseña provisional y rol, validando la política. |
 | `crear_venta` | Registra una venta completa en una sola transacción: valida stock (variantes y kits), descuenta, numera y contabiliza. |
 | `cuenta_efectivo` | Valida que la cuenta sea Caja o Bancos. |
 | `cuenta_por_clave` | Id de una cuenta contable a partir de su clave estable. |
+| `eliminar_rol` | Elimina un rol propio que no tenga usuarios. |
 | `fecha_local` | Convierte un instante a la fecha del negocio (zona horaria configurada). |
 | `generar_apertura_contable` | Inicia la contabilidad con inventario y ventas pendientes contra capital. |
+| `generar_codigo_recuperacion` | El administrador genera un código temporal de un solo uso (se guarda su hash). |
+| `guardar_permisos_rol` | Reemplaza los permisos de un rol con las reglas de la matriz (admin intocable, Configuración solo del admin, crear/editar/eliminar exigen ver). |
+| `hash_contrasena` | Genera el hash bcrypt de una contraseña. |
 | `hoy_negocio` | Fecha de hoy en la hora del negocio. |
 | `obtener_siguiente_numero_fiscal` | Reserva el siguiente número del CAI vigente. Bloquea si el CAI venció o se agotó. |
 | `obtener_siguiente_numero_interno` | Reserva el siguiente comprobante interno (INT-000001) cuando no hay CAI activo. |
+| `otros_administradores_activos` | Cuenta los administradores activos sin contar a uno, para no quedarse sin ninguno. |
 | `registrar_abono_cliente` | Registra un abono parcial o total y baja la deuda. |
+| `registrar_auditoria` | Anota una acción en la auditoría (la usan las demás funciones y el servidor). |
 | `registrar_compra` | Registra una compra: sube stock, recalcula el costo promedio y genera la partida. |
 | `registrar_gasto` | Registra un gasto (pagado o por pagar) con su partida. |
 | `registrar_ingreso` | Registra un ingreso (cobrado o por cobrar) con su partida. |
@@ -697,6 +799,9 @@ Las reglas críticas viven en la base de datos para que cada operación sea ató
 | `registrar_partida_manual` | Registra un asiento manual. |
 | `registrar_saldo_inicial` | Registra el saldo inicial de Caja o Bancos contra capital. |
 | `saldo_cuenta` | Saldo de una cuenta con su signo natural. |
+| `usar_codigo_recuperacion` | Usa el código para elegir una contraseña nueva; los intentos fallidos bloquean. |
+| `validar_contrasena` | Política: 8 a 72 caracteres, con letras y números, distinta del usuario. |
+| `validar_permiso_rol` | Trigger: Configuración es solo del rol admin. |
 | `valor_inventario` | Valor de las existencias a costo. |
 | `verificar_partida_balanceada` | Trigger diferido: una partida solo se confirma si Debe = Haber. |
 

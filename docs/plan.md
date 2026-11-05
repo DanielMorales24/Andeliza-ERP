@@ -30,12 +30,43 @@ El piso de app completa es el conjunto mínimo de capacidades que hace que la ap
 | **2** | **Planeación y datos maestros.** Planear el trabajo y poder cargar el catálogo desde la nube. | `mapa-historias.md`, `plan.md`, `issues_mvp.md`, bitácora 2. Categorías, clientes, proveedores y productos con imagen, variantes y kits. Facturación interna. Primer despliegue en Vercel. | HU-04 a HU-09, HU-12 | ✔ |
 | **3** | **Modelo de datos y punto de venta.** Ordenar el modelo y poder cobrar con factura. | `modelo-datos.md`, migraciones numeradas, `seed.sql`, bitácora 3. Punto de venta, facturación con CAI e interna, PDF, cotización e historial. | HU-10, HU-11, HU-13, HU-14, HU-15 | ✔ |
 | **4** | **Finanzas y contabilidad. Se alcanza el piso de app completa.** El dueño ve su situación real. | Partida doble, cuentas por cobrar y por pagar, ingresos, gastos y compras, libro diario, panel financiero y cuatro reportes en PDF. | HU-16 a HU-25 | ✔ |
-| **5** | **Inventario visual y alertas.** Saber qué reponer. Pulir lo construido. | Fase 5. Pruebas de aceptación de cada historia de los cortes 1 y 2 contra sus criterios Gherkin. Correcciones. | HU-26 | ⬜ |
-| **6** | **Estadísticas.** Entender qué se vende más y cuándo. | Fase 6: ventas por período y los productos y categorías más vendidos. | HU-27 | ⬜ |
-| **7** | **Configuración y seguridad.** Que el negocio se administre solo y que las cuentas estén protegidas. | Fase 7: datos del negocio, CAI y usuarios desde la interfaz. Contraseñas con hash, protección CSRF y límite de intentos. Revisión del formato de factura con un contador. | HU-28, HU-29 | ⬜ |
-| **8** | **Móvil, QR y métodos de pago.** Vender desde un celular. | Fase 8: acceso por QR y método de pago en el punto de venta. Pruebas en celulares reales. | HU-30, HU-31 | ⬜ |
+| **5** | **Inventario visual y alertas.** Saber qué reponer. | *Absorbida por la Fase 2 (decisión D-02).* El listado ya muestra la foto de cada producto, su estado de stock y filtros con conteo, y el panel muestra los artículos por reponer. La lista de reposición pasa a la Fase 8 y las pruebas de aceptación contra los criterios Gherkin, a la semana 9. | HU-26 | ◐ *(resuelta en la Fase 2)* |
+| **6** | **Estadísticas.** Entender qué se vende más y cuándo. | Fase 6: ventas por período y los productos y categorías más vendidos. | HU-27 | ⬜ *(pospuesta, ver D-01)* |
+| **7** | **Configuración y seguridad.** Que el negocio se administre solo y que las cuentas estén protegidas. | Fase 7: datos del negocio, CAI y usuarios desde la interfaz. Contraseñas con hash, protección CSRF y límite de intentos. Revisión del formato de factura con un contador. | HU-28, HU-29 | ◐ *(construida en la semana 4)* |
+| **8** | **Avisos automáticos y asistente con IA.** Que el sistema avise solo y responda preguntas. *(Ideas por validar con las pymes.)* | Fase 8: notificaciones automáticas por WhatsApp o correo (stock bajo con su lista de reposición y facturas vencidas), asistente virtual con IA para consultar ventas e inventario con preguntas en lenguaje natural, y método de pago en el punto de venta. | HU-30, HU-31, HU-32 | ⬜ |
 | **9** | **Piloto y calidad.** Probar con personas reales. | Uso real con el cliente 1 y con dos o tres pymes más. Medición de las hipótesis H1 y H2. Pruebas automatizadas dentro del repositorio. CSS de Tailwind compilado. Defectos críticos cerrados. | Todas | ⬜ |
 | **10** | **Cierre y entrega.** Dejar el proyecto listo para evaluarse. | Manual de usuario, guion de demostración, presentación, documentación final, bitácoras completas y versión estable etiquetada (v1.0). | — | ⬜ |
+
+◐ = hecha en gran parte. De la Fase 7 quedan la protección CSRF, un límite de intentos por IP y la revisión del formato de factura con un contador. Todo lo demás (datos del negocio y CAI desde la interfaz, usuarios, roles y permisos, contraseñas con bcrypt, bloqueo por intentos, recuperación y auditoría) está hecho y probado. De la Fase 5 solo queda la lista de reposición por proveedor, que se pasó a la Fase 8.
+
+### Decisión de arquitectura D-01: la Fase 7 se construye antes que la Fase 6
+
+**Decisión.** Se pospone el módulo de Estadísticas (Fase 6) y se construye primero el de Configuración, Usuarios y Roles con permisos granulares (Fase 7).
+
+**Contexto.** En la semana 4 la universidad exige el entregable "Login y Roles". Además, las estadísticas que el dueño necesita ("¿cuánto vendió el vendedor A este mes?", "¿cómo le fue a cada rol?") dependen de saber **quién** hizo cada venta y **con qué rol**.
+
+**Alternativas.** (a) Hacer Estadísticas primero con solo el administrador y el vendedor de antes y rehacer los reportes cuando existieran los roles. (b) Hacer los roles primero y que las estadísticas nazcan ya sabiendo medir por usuario y por rol.
+
+**Consecuencias.** Se eligió (b). Las ventas ya guardan `usuario_id`, y `usuarios.rol_id` y `roles` permiten agrupar por vendedor y por rol sin migraciones nuevas. A cambio, las estadísticas llegan más tarde: ya no es un tema de "pendiente por olvido" sino un orden elegido. También se adelantó el hash de contraseñas, que era la deuda de seguridad más importante.
+
+### Decisión de arquitectura D-02: la Fase 5 no se construye como fase aparte
+
+**Decisión.** Se da por absorbida la Fase 5 (Inventario visual y alertas) y la semana 5 queda disponible.
+
+**Contexto.** Al revisar el código se comprobó que la Fase 2 ya entregó lo visual. El listado de inventario muestra la foto de cada producto (con sus iniciales si no tiene imagen), su estado de stock (En stock, Stock bajo o Agotado), filtros con conteo y una vista de tarjetas. Además, el panel de inicio indica cuántos artículos están por reponer.
+
+**Alternativas.** (a) Construir una vista visual y alertas nuevas, que repetirían lo que ya existe. (b) Dar la Fase 5 por cubierta y usar ese tiempo en lo que falta.
+
+**Consecuencias.** Se eligió (b). Dos de los tres escenarios de HU-26 quedan cubiertos desde la Fase 2. El tercero, la lista de reposición agrupada por proveedor, se une a los avisos automáticos de la Fase 8 (HU-30). Las pruebas de aceptación contra los criterios Gherkin pasan a la semana 9. La semana 5 se propone para las Estadísticas (Fase 6), que ya cuentan con quién vendió y con qué rol.
+
+### Decisión D-03: se descarta el acceso móvil por QR
+
+**Decisión.** Se elimina del plan el acceso móvil con código QR.
+
+**Contexto.** Andeliza es una aplicación web y se abre desde el navegador de cualquier celular con su dirección. Un QR solo ahorraría escribir esa dirección y no resuelve ningún problema del dueño del negocio.
+
+**Consecuencias.** La Fase 8 se reemplaza por ideas de valor real: avisos automáticos (HU-30) y un asistente virtual con IA (HU-32). El método de pago en el punto de venta (HU-31) se mantiene. La tabla `codigos_temporales`, que la Fase 1 dejó para ese fin, hoy no la usa ninguna pantalla y puede eliminarse en una migración futura.
+
 
 ### Avance frente al plan
 
@@ -62,7 +93,7 @@ El proyecto es individual y usa un método sencillo: **Kanban con iteraciones se
 
 ### Definición de listo y de terminado
 
-**Una historia está lista para empezar cuando** tiene rol, objetivo, criterios Gherkin y su cort Tee, y se sabe qué tablas toca.
+**Una historia está lista para empezar cuando** tiene rol, objetivo, criterios Gherkin y su corte, y se sabe qué tablas toca.
 
 **Una historia está terminada cuando:**
 
@@ -85,7 +116,7 @@ Se usa un asistente de inteligencia artificial para generar y revisar código, a
 | Riesgo | Probabilidad | Impacto | Qué se hace |
 |---|:---:|:---:|---|
 | El negocio no tiene internet estable y no puede vender (H2) | Media | Alto | Preguntarlo en las conversaciones, medir la latencia en el negocio del cliente 1 y evaluar un modo de contingencia si el dato lo justifica. |
-| Contraseñas en texto plano mientras llega la Fase 7 | Cierta | Alto | No usar el sistema con datos reales de terceros antes de la semana 7. Priorizar HU-29. |
+| Falta protección CSRF y un límite de intentos por IP | Media | Medio | Las contraseñas ya van con bcrypt, hay bloqueo por cuenta y auditoría. El token CSRF y el límite por IP quedan para antes del piloto (semana 9). |
 | El formato de factura no satisface al contador (H3) | Media | Alto | Revisión con un contador en la semana 7 y ajustes antes del piloto. |
 | El alcance crece más rápido que el tiempo | Alta | Medio | Todo lo nuevo entra al tablero como historia con su corte. Lo que no cabe se mueve a "Fuera del alcance". |
 | Dependencia de servicios gratuitos de la nube (límites de uso) | Media | Medio | Vigilar el consumo en Supabase y Vercel y presupuestar los planes de pago en la estructura de costos. |

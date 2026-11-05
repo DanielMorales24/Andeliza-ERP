@@ -31,7 +31,7 @@ Las historias se identifican como `HU-01`, `HU-02`, etc. y están escritas con c
 |---|---|---|---|---|---|---|---|
 | **Corte 1: Ventas e inventario** | HU-01 HU-02 HU-03 | HU-04 HU-05 HU-06 HU-07 | HU-08 HU-09 | HU-10 HU-11 HU-12 HU-13 HU-14 HU-15 | | | |
 | **Corte 2: Finanzas y contabilidad** | | | | | HU-16 HU-17 HU-18 HU-19 HU-20 | HU-21 HU-24 HU-25 | HU-22 HU-23 |
-| **Corte 3: Análisis, seguridad y móvil** | HU-28 HU-29 HU-30 | HU-26 | | HU-31 | | | HU-27 |
+| **Corte 3: Análisis, seguridad y automatización** | HU-28 HU-29 | HU-26 | | HU-31 | | | HU-27 HU-30 HU-32 |
 
 ## Detalle por actividad
 
@@ -43,10 +43,9 @@ Estado: ✔ construida · ⬜ pendiente.
 |---|---|:---:|:---:|:---:|:---:|
 | Iniciar sesión | **HU-01** Entrar con usuario y contraseña y llegar a la pantalla que corresponde al rol | ✔ | ✔ | 1 | ✔ |
 | Ver cómo va el negocio | **HU-02** Panel con ventas, productos con stock bajo y modo de facturación vigente | ✔ | — | 1 | ✔ |
-| Limitar el acceso según el rol | **HU-03** Cada rol ve y usa solo sus módulos | ✔ | ✔ | 1 | ✔ |
-| Mantener los datos del negocio y los usuarios | **HU-28** Editar nombre, logo, RTN, CAI y usuarios desde la interfaz | ✔ | — | 3 | ⬜ |
-| Proteger las cuentas | **HU-29** Contraseñas con hash, protección CSRF y límite de intentos | ✔ | ✔ | 3 | ⬜ |
-| Entrar desde el celular | **HU-30** Acceso móvil con un código QR | ✔ | ✔ | 3 | ⬜ |
+| Limitar el acceso según el rol | **HU-03** Cada rol ve y usa solo lo que sus permisos permiten (el servidor responde 403) | ✔ | ✔ | 1 | ✔ |
+| Mantener los datos del negocio y los usuarios | **HU-28** Editar nombre, logo, RTN, CAI, usuarios, roles y permisos desde la interfaz | ✔ | — | 3 | ✔ |
+| Proteger las cuentas | **HU-29** Contraseñas con hash, recuperación, límite de intentos y protección CSRF *(CSRF pendiente)* | ✔ | ✔ | 3 | ◐ |
 
 ### 2. Armar el catálogo y controlar el inventario
 
@@ -56,7 +55,7 @@ Estado: ✔ construida · ⬜ pendiente.
 | Registrar un producto | **HU-05** Producto con SKU, precios, unidad, stock mínimo e imagen | ✔ | — | 1 | ✔ |
 | Vender el mismo producto en varias tallas o ediciones | **HU-06** Variantes con stock propio | ✔ | — | 1 | ✔ |
 | Vender combos | **HU-07** Kits que descuentan el stock de sus componentes | ✔ | — | 1 | ✔ |
-| Saber qué reponer | **HU-26** Inventario visual y alertas de stock bajo | ✔ | — | 3 | ⬜ |
+| Saber qué reponer | **HU-26** Inventario visual y alertas de stock bajo *(construida en la Fase 2, la lista de reposición pasa a HU-30)* | ✔ | — | 3 | ✔ |
 
 ### 3. Administrar clientes y proveedores
 
@@ -102,6 +101,8 @@ Estado: ✔ construida · ⬜ pendiente.
 | Ver la situación del dinero | **HU-22** Panel con caja y bancos, por cobrar, por pagar, utilidad del mes y gráfico de seis meses | ✔ | — | 2 | ✔ |
 | Sacar los reportes | **HU-23** Estado de resultados, flujo de caja, balance general y antigüedad de saldos en PDF | ✔ | — | 2 | ✔ |
 | Ver qué se vende más | **HU-27** Estadísticas de ventas | ✔ | — | 3 | ⬜ |
+| Enterarme sin entrar al sistema | **HU-30** Avisos automáticos por WhatsApp o correo de stock bajo y facturas vencidas *(idea por validar)* | ✔ | — | 3 | ⬜ |
+| Preguntarle al sistema | **HU-32** Asistente virtual con IA: "¿cuánto vendí hoy?", "¿qué producto me falta?" *(idea por validar)* | ✔ | ✔ | 3 | ⬜ |
 
 ## Cortes
 
@@ -127,12 +128,12 @@ Estado: ✔ construida · ⬜ pendiente.
 
 Con el Corte 2 se alcanza el **piso de app completa** descrito en [plan.md](plan.md).
 
-### Corte 3: Análisis, seguridad y móvil
+### Corte 3: Análisis, seguridad y automatización
 
 **Meta:** reforzar el producto para uso real con usuarios no técnicos.
 
-**Historias:** HU-26 a HU-31.
+**Historias:** HU-26 a HU-32.
 
-**Al terminar, la persona puede:** ver alertas de stock y estadísticas, administrar su negocio y sus usuarios desde la interfaz con contraseñas protegidas, entrar desde el celular con un QR y registrar el método de pago de cada venta.
+**Al terminar, la persona puede:** ver alertas de stock y estadísticas, administrar su negocio, sus usuarios y los permisos de cada rol con contraseñas protegidas, recibir avisos automáticos de stock bajo y facturas vencidas, preguntarle al sistema con un asistente con IA y registrar el método de pago de cada venta.
 
 **Criterio de salida:** ninguna contraseña en texto plano y una venta completa hecha desde un celular real.

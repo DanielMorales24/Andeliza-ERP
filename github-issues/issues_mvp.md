@@ -10,7 +10,7 @@ El mapa completo está en [docs/mapa-historias.md](../docs/mapa-historias.md).
 |---|---|---|
 | 1. Ventas e inventario | HU-01 a HU-15 | Construido |
 | 2. Finanzas y contabilidad | HU-16 a HU-25 | Construido |
-| 3. Análisis, seguridad y móvil | HU-26 a HU-31 | Pendiente |
+| 3. Análisis, seguridad y automatización | HU-26 a HU-32 | En curso: HU-26 y HU-28 construidas, HU-29 en parte |
 
 ---
 
@@ -73,25 +73,35 @@ Característica: Panel de inicio
 
 ---
 
-## HU-03 · Limitar el acceso según el rol
+## HU-03 · Limitar el acceso según el rol y los permisos
 
-**Milestone:** Corte 1 · **Etiquetas:** `corte-1` `feature` `seguridad` `rol-admin` `rol-vendedor` · **Estado:** construida
+**Milestone:** Corte 1 · **Etiquetas:** `corte-1` `feature` `seguridad` `rol-admin` `rol-vendedor` · **Estado:** construida (ampliada con permisos granulares en la Fase 7)
 
-**Historia:** Como dueño del negocio, quiero que cada rol vea solo sus módulos, para que el vendedor no acceda a la información administrativa.
+**Historia:** Como dueño del negocio, quiero que cada rol use solo lo que sus permisos permiten y que el servidor lo haga cumplir, para que nadie acceda a información que no le corresponde aunque escriba la dirección a mano.
 
 ```gherkin
 # language: es
 Característica: Permisos por rol
 
-  Escenario: El vendedor solo ve el punto de venta
+  Escenario: El vendedor solo ve sus módulos
     Dado que inicié sesión como vendedor
     Cuando miro el menú lateral
-    Entonces solo veo el punto de venta
+    Entonces veo el punto de venta, los clientes y mis facturas, y nada más
 
   Escenario: El vendedor intenta abrir una pantalla de administración
     Dado que inicié sesión como vendedor
-    Cuando intento abrir la pantalla de inventario por su dirección
-    Entonces veo una página de acceso denegado
+    Cuando escribo la dirección de finanzas en el navegador
+    Entonces el servidor responde 403 y veo una página de acceso denegado
+
+  Escenario: El intento queda registrado
+    Dado que un vendedor intentó abrir una pantalla sin permiso
+    Cuando el administrador revisa la auditoría
+    Entonces ve quién lo intentó, la ruta y la dirección IP
+
+  Escenario: Cada rol llega a su lugar
+    Dado que inicié sesión como contador
+    Cuando termino de entrar
+    Entonces llego a finanzas
 
   Escenario: Sin sesión
     Dado que no he iniciado sesión
@@ -781,9 +791,9 @@ Característica: Inicio de la contabilidad
 
 ## HU-26 · Ver el inventario visual y recibir alertas de stock bajo
 
-**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `rol-admin` · **Estado:** pendiente (Fase 5)
+**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `rol-admin` · **Estado:** construida en la Fase 2 (escenarios 1 y 2). La lista de reposición pasó a HU-30
 
-**Historia:** Como administrador, quiero ver mi inventario con imágenes y recibir alertas, para saber qué reponer antes de quedarme sin producto.
+**Historia:** Como administrador, quiero ver mi inventario con imágenes y ver qué producto está por agotarse, para saber qué reponer antes de quedarme sin producto.
 
 ```gherkin
 # language: es
@@ -791,18 +801,13 @@ Característica: Inventario visual y alertas
 
   Escenario: Vista con imágenes
     Dado que tengo productos con imagen
-    Cuando abro el inventario en vista visual
+    Cuando abro el inventario
     Entonces veo cada producto con su foto, su stock y su estado
 
   Escenario: Alerta de stock bajo
     Dado un producto con stock igual o menor a su mínimo
     Cuando abro el inventario
-    Entonces aparece marcado como por reponer
-
-  Escenario: Lista de reposición
-    Dado varios productos por reponer
-    Cuando pido la lista de reposición
-    Entonces la veo agrupada por proveedor y puedo iniciar una compra
+    Entonces aparece marcado como stock bajo y cuenta en el panel de inicio
 ```
 
 ---
@@ -835,11 +840,11 @@ Característica: Estadísticas
 
 ---
 
-## HU-28 · Editar los datos del negocio y administrar usuarios
+## HU-28 · Editar los datos del negocio y administrar usuarios, roles y permisos
 
-**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `rol-admin` · **Estado:** pendiente (Fase 7)
+**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `rol-admin` · **Estado:** construida (Fase 7)
 
-**Historia:** Como administrador, quiero cambiar los datos de mi negocio, cargar mi CAI y administrar mis usuarios desde la interfaz, para no depender de nadie técnico.
+**Historia:** Como administrador, quiero cambiar los datos de mi negocio, cargar mi CAI y administrar mis usuarios, roles y permisos desde la interfaz, para no depender de nadie técnico.
 
 ```gherkin
 # language: es
@@ -850,22 +855,42 @@ Característica: Configuración
     Cuando cambio el nombre, el logo y el RTN
     Entonces las facturas y los reportes nuevos usan esos datos
 
-  Escenario: Cargar un CAI
-    Dado un negocio en modo interno
-    Cuando cargo un CAI con su rango y su fecha límite
+  Escenario: Activar el SAR
+    Dado un negocio que factura con comprobantes internos
+    Cuando enciendo el interruptor del SAR y cargo un CAI con su rango y su fecha límite
     Entonces las facturas nuevas pasan a usar la numeración del SAR
 
   Escenario: Crear un usuario
     Dado que soy administrador
-    Cuando creo un usuario vendedor
-    Entonces puede iniciar sesión y solo ve el punto de venta
+    Cuando creo un usuario vendedor con una contraseña inicial
+    Entonces puede iniciar sesión, debe cambiar su contraseña y solo ve lo que su rol permite
+
+  Escenario: Desactivar un usuario
+    Dado un usuario con la sesión abierta
+    Cuando el administrador lo desactiva
+    Entonces en su siguiente clic vuelve al inicio de sesión y no puede entrar de nuevo
+
+  Escenario: Cambiar los permisos de un rol
+    Dado el rol vendedor con permiso para cobrar
+    Cuando el administrador le quita ese permiso en la matriz
+    Entonces un vendedor con la sesión abierta ya no puede cobrar
+
+  Escenario: Configuración es solo del administrador
+    Dado que soy supervisor
+    Cuando intento abrir la configuración
+    Entonces recibo acceso denegado
+
+  Escenario: Nunca se pierde el acceso
+    Dado que soy el único administrador activo
+    Cuando intento desactivarme o quitarme el rol
+    Entonces el sistema no me deja
 ```
 
 ---
 
 ## HU-29 · Proteger las contraseñas y el acceso
 
-**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `seguridad` `rol-admin` `rol-vendedor` · **Estado:** pendiente (Fase 7)
+**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `seguridad` `rol-admin` `rol-vendedor` · **Estado:** construida en parte (Fase 7): hash, bloqueo y recuperación listos; protección CSRF pendiente
 
 **Historia:** Como dueño del negocio, quiero que las contraseñas estén protegidas y que no se pueda adivinar una cuenta a fuerza de intentos, para resguardar mi información.
 
@@ -879,48 +904,70 @@ Característica: Seguridad de las cuentas
     Entonces ninguna contraseña está guardada en texto plano
 
   Escenario: Intentos fallidos
-    Dado que fallé varias veces seguidas al iniciar sesión
-    Cuando intento otra vez
-    Entonces el acceso se bloquea por un tiempo
+    Dado que fallé cinco veces seguidas al iniciar sesión
+    Cuando intento otra vez, incluso con la contraseña correcta
+    Entonces el acceso se bloquea por 15 minutos
 
-  Escenario: Formularios protegidos
-    Dado un formulario que cambia datos
-    Cuando se envía sin el token de seguridad de la sesión
-    Entonces el servidor lo rechaza
+  Escenario: Contraseña provisional
+    Dado un usuario nuevo con contraseña provisional
+    Cuando inicia sesión por primera vez
+    Entonces solo puede cambiar su contraseña hasta que lo haga
+
+  Escenario: Recuperar la contraseña
+    Dado un usuario que olvidó su contraseña
+    Cuando el administrador genera un código y el usuario lo escribe con una contraseña nueva
+    Entonces entra con la nueva, y el código ya no sirve ni vence después de 30 minutos
 
   Escenario: Migración de los usuarios existentes
     Dado usuarios con contraseña en texto plano
     Cuando se aplica la migración de seguridad
-    Entonces todos pasan a tener hash y pueden entrar con la misma contraseña
+    Entonces todos pasan a tener hash, conservan su rol y pueden entrar con la misma contraseña
+
+  Escenario: Formularios protegidos (pendiente)
+    Dado un formulario que cambia datos
+    Cuando se envía sin el token de seguridad de la sesión
+    Entonces el servidor lo rechaza
 ```
 
 ---
 
-## HU-30 · Entrar desde el celular con un QR
+## HU-30 · Recibir avisos automáticos de stock bajo y facturas vencidas
 
-**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `rol-admin` `rol-vendedor` · **Estado:** pendiente (Fase 8)
+**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `idea` `rol-admin` · **Estado:** pendiente (Fase 8, idea por validar con las pymes)
 
-**Historia:** Como administrador, quiero generar un código QR, para que mi equipo abra el sistema en su celular sin escribir la dirección.
+**Historia:** Como administrador, quiero que el sistema me avise por WhatsApp o por correo cuando un producto llegue a su stock mínimo o una factura se venza, para actuar a tiempo sin tener que entrar a revisar.
 
 ```gherkin
 # language: es
-Característica: Acceso móvil con QR
+Característica: Avisos automáticos
 
-  Escenario: Generar el QR
-    Dado que soy administrador
-    Cuando pido el código QR de acceso
-    Entonces veo un QR que abre la aplicación en el navegador del celular
+  Escenario: Aviso de stock bajo
+    Dado un producto cuyo stock llega a su mínimo
+    Cuando el sistema revisa el inventario
+    Entonces recibo un aviso con el producto y las unidades que quedan
 
-  Escenario: Código temporal
-    Dado un código de acceso con vencimiento
-    Cuando se usa después de su vencimiento
-    Entonces el sistema lo rechaza
+  Escenario: Lista de reposición
+    Dado varios productos por reponer
+    Cuando recibo el aviso de stock bajo
+    Entonces veo la lista agrupada por proveedor y puedo iniciar una compra
 
-  Escenario: Código de un solo uso
-    Dado un código ya utilizado
-    Cuando alguien intenta usarlo otra vez
-    Entonces el sistema lo rechaza
+  Escenario: Aviso de factura vencida
+    Dado una factura a crédito que pasó su fecha de vencimiento
+    Cuando el sistema revisa las cuentas por cobrar
+    Entonces recibo un aviso con el cliente, el monto y los días de atraso
+
+  Escenario: Elegir el canal
+    Dado que estoy en configuración
+    Cuando elijo WhatsApp o correo y escribo el destino
+    Entonces los avisos llegan por ese canal
+
+  Escenario: Sin avisos repetidos
+    Dado un producto del que ya me avisaron
+    Cuando el sistema vuelve a revisar y sigue igual
+    Entonces no recibo el mismo aviso otra vez ese día
 ```
+
+**Por definir:** el servicio de envío de WhatsApp (cuenta empresarial y plantillas aprobadas) y el de correo, su costo, y cada cuánto revisa el sistema (por ejemplo, una tarea programada en Vercel).
 
 ---
 
@@ -949,3 +996,48 @@ Característica: Método de pago
     Cuando abro el flujo de caja
     Entonces veo cuánto entró por Caja y cuánto por Bancos
 ```
+
+---
+
+## HU-32 · Preguntarle al sistema con un asistente virtual con IA
+
+**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `idea` `rol-admin` `rol-vendedor` · **Estado:** pendiente (Fase 8, idea por validar con las pymes)
+
+**Historia:** Como dueño del negocio, quiero hacerle preguntas al sistema con mis propias palabras, como "¿cuánto vendí hoy?" o "¿qué producto me falta?", para tener la respuesta sin buscar entre pantallas ni armar reportes.
+
+```gherkin
+# language: es
+Característica: Asistente virtual
+
+  Escenario: Ventas del día
+    Dado que soy administrador
+    Cuando pregunto "¿cuánto vendí hoy?"
+    Entonces recibo el total de hoy y la cantidad de ventas
+
+  Escenario: Producto por reponer
+    Dado productos con stock bajo
+    Cuando pregunto "¿qué producto me falta?"
+    Entonces recibo la lista de productos por reponer con sus existencias
+
+  Escenario: Respeta los permisos
+    Dado que soy vendedor
+    Cuando pregunto por las finanzas del negocio
+    Entonces el asistente me dice que no tengo permiso, igual que el resto del sistema
+
+  Escenario: Cada quien consulta lo suyo
+    Dado que soy vendedor
+    Cuando pregunto "¿cuánto vendí este mes?"
+    Entonces recibo solo mis ventas
+
+  Escenario: Respuestas con datos reales
+    Dado una pregunta que el sistema no puede responder con sus datos
+    Cuando el asistente no encuentra la información
+    Entonces lo dice y no inventa una cifra
+
+  Escenario: Solo consulta
+    Dado cualquier pregunta
+    Cuando el asistente responde
+    Entonces no crea, cambia ni borra ningún dato
+```
+
+**Por definir:** el modelo de IA y su costo. Cada respuesta debe salir de consultas a la base de datos y no de la memoria del modelo. Se apoya en los roles y permisos de la Fase 7: el asistente actúa con los permisos de quien pregunta.

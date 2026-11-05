@@ -19,9 +19,12 @@
 -- 1) Catálogo
 -- ---------------------------------------------------------------------
 -- Usuarios (cambia las contraseñas antes de usarlo de verdad)
-INSERT INTO usuarios (nombre, usuario, contrasena, rol) VALUES
-  ('Administrador', 'admin',    'admin123',    'admin'),
-  ('Vendedor Demo', 'vendedor', 'vendedor123', 'vendedor');
+-- Usuarios de demostración (contraseñas con bcrypt; cámbialas antes de usarlo con datos reales)
+INSERT INTO usuarios (nombre, usuario, contrasena, rol_id) VALUES
+  ('Administrador',   'admin',      hash_contrasena('admin123'),      (SELECT id FROM roles WHERE nombre = 'admin')),
+  ('Vendedor Demo',   'vendedor',   hash_contrasena('vendedor123'),   (SELECT id FROM roles WHERE nombre = 'vendedor')),
+  ('Contador Demo',   'contador',   hash_contrasena('contador123'),   (SELECT id FROM roles WHERE nombre = 'contador')),
+  ('Supervisor Demo', 'supervisor', hash_contrasena('supervisor123'), (SELECT id FROM roles WHERE nombre = 'supervisor'));
 
 -- Datos del negocio (los mismos de client.config.js)
 UPDATE configuracion_negocio SET

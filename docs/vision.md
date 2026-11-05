@@ -93,7 +93,7 @@ Son las suposiciones que, si resultan falsas, harían inviable el proyecto. Cada
 - Alertas de stock y vista visual del inventario.
 - Estadísticas de ventas.
 - Configuración del negocio y de los usuarios desde la interfaz, con contraseñas protegidas.
-- Acceso desde el celular con QR.
+- Avisos automáticos y asistente virtual con IA *(Fase 8, ideas por validar con las pymes)*.
 - Despliegue en la nube con HTTPS público y documentación.
 
 ### Fuera del alcance (por ahora)

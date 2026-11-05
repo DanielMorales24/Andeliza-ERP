@@ -16,10 +16,10 @@ Stack: Node.js 20 + Express, EJS, PostgreSQL (Supabase), Tailwind y Alpine.js po
 | 2 | CRUDs: categorías, clientes, proveedores, productos (imagen, variantes, kits) y facturación interna | Hecha |
 | 3 | POS y facturación (PDF, cotización, historial) | Hecha |
 | 4 | Finanzas y contabilidad: partida doble, cuentas por cobrar y por pagar, reportes en PDF | Hecha |
-| 5 | Inventario visual y alertas de stock | Pendiente |
+| 5 | Inventario visual y alertas de stock | Absorbida por la Fase 2 |
 | 6 | Estadísticas | Pendiente |
-| 7 | Configuración | Pendiente |
-| 8 | Vista móvil y QR | Pendiente |
+| 7 | Configuración, usuarios y roles con permisos (hecha antes que la 6, por decisión de arquitectura D-01) | Hecha |
+| 8 | Avisos automáticos, asistente virtual con IA y método de pago | Pendiente (ideas por validar) |
 
 ## Puesta en marcha local
 
@@ -31,9 +31,10 @@ La instalación paso a paso está en el [README](../README.md#instalación). Res
 app.js                 Configuración de Express (middlewares, vistas, rutas, errores)
 api/index.js           Punto de entrada para Vercel (exporta app, sin listen)
 client.config.js       TODO lo específico del cliente
-modulos.js             Lista de módulos: menú, roles y funcionalidades
+modulos.js             Lista de módulos: menú por permisos, pantalla de inicio y funcionalidades
 db.js                  Pool de pg y conversión de tipos
-middlewares/auth.js    requireAuth, soloRoles, requireFuncionalidad
+middlewares/auth.js    cargarPermisos (requireAuth), requirePermiso, requireAlgunPermiso, requireFuncionalidad
+middlewares/auditar.js Anota en la auditoría una acción que salió bien
 routes/ controllers/ models/   Un archivo por módulo
 controllers/entidad.js Fábrica de CRUD para listados con modal (categorías, clientes, proveedores)
 controllers/finanzas.js, cartera.js, movimientos.js   Resumen, libro diario, CxC y CxP, ingresos/gastos/compras, reportes
@@ -49,7 +50,7 @@ services/storageService.js  Subida y borrado de imágenes en Supabase Storage (s
 public/js/             ui.js (utilidades), entidades.js, inventario.js, producto-form.js, pos.js, facturas.js, finanzas-*.js (Alpine)
 routes/modulos.js      Páginas "próximamente" de los módulos que aún no existen
 views/                 EJS: layouts, partials y una carpeta por módulo
-db/                    migrations/ (01 a 04), functions.sql, seed.sql y README.md
+db/                    migrations/ (01 a 05), functions.sql, seed.sql y README.md
 ```
 
 ## Facturación: modo SAR o modo interno
@@ -114,20 +115,43 @@ número. Carga de 50 en 50. Cada factura se puede ver o descargar en PDF; las pe
 
 | Método y ruta | Quién | Qué hace |
 |---|---|---|
-| `GET /pos` | admin, vendedor | Pantalla del POS (catálogo, clientes, tasa y modo de facturación) |
-| `GET /pos/catalogo` | admin, vendedor | Catálogo con el stock actual (JSON) |
-| `POST /pos/clientes` | admin, vendedor | Alta rápida de cliente |
-| `POST /pos/cobrar` | admin, vendedor | Cobra. Cuerpo: `cliente_id`, `items` (`producto_id`, `variante_id`, `cantidad`), `pendiente`, `clave` |
-| `POST /pos/cotizacion` | admin, vendedor | PDF de cotización (campo de formulario `datos` con el carrito en JSON) |
+| `GET /pos` | `pos.ver` | Pantalla del POS (catálogo, clientes, tasa y modo de facturación) |
+| `GET /pos/catalogo` | `pos.ver` | Catálogo con el stock actual (JSON) |
+| `POST /pos/clientes` | `clientes.crear` | Alta rápida de cliente |
+| `POST /pos/cobrar` | `pos.crear` | Cobra. Cuerpo: `cliente_id`, `items` (`producto_id`, `variante_id`, `cantidad`), `pendiente`, `clave` |
+| `POST /pos/cotizacion` | `pos.crear` | PDF de cotización (campo de formulario `datos` con el carrito en JSON) |
 | `GET /facturas` | admin | Pantalla del historial |
 | `GET /facturas/datos` | admin | Historial en JSON: `desde`, `hasta`, `tipo`, `estado`, `q`, `offset` |
 | `PATCH /facturas/:id/pagada` | admin | Marca una factura como pagada |
-| `GET /facturas/:id/pdf[?descargar=1]` | admin (todas), vendedor (solo las suyas) | PDF de la venta |
+| `GET /facturas/:id/pdf[?descargar=1]` | `facturas.ver` (todas); sin él, solo las propias | PDF de la venta |
 | `GET /salud[?pdf=1]` | público | Comprueba la base de datos (y la generación de PDF) |
 
 En `/facturas/datos`, si no se manda `desde` se usa el primer día del mes; mandarlo vacío (`desde=`) significa sin límite.
 Las rutas del POS responden 404 si `funcionalidades.pos` está en `false`; `/facturas` y su JSON, si `facturas` está en `false`.
 El PDF sirve con cualquiera de las dos funcionalidades activas.
+
+## Configuración, usuarios y cuenta (Fase 7)
+
+Todo `/configuracion` exige permisos de `configuracion`, que son solo del rol `admin`. El detalle de qué permiso pide cada ruta del sistema está en [permisos.md](permisos.md).
+
+| Ruta | Permiso | Qué hace |
+|---|---|---|
+| `GET /configuracion` | `configuracion.ver` | Pestaña Negocio (datos, logo, interruptor del SAR) |
+| `PUT /configuracion/negocio` | `configuracion.editar` | Guarda nombre, RTN, dirección, teléfono, correo y logo (multipart; PNG o JPG hasta 3 MB) |
+| `PUT /configuracion/facturacion` | `configuracion.editar` | `sar`: true/false. Con true: `cai`, `rango_inicio`, `rango_fin`, `fecha_limite`, `tasa` (%), `pie_legal` |
+| `GET /configuracion/usuarios`, `.../datos` | `configuracion.ver` | Lista de usuarios con rol, estado y último acceso |
+| `POST /configuracion/usuarios` | `configuracion.crear` | Cuerpo: `nombre`, `usuario`, `contrasena`, `rol_id`, `debe_cambiar` |
+| `PUT /configuracion/usuarios/:id` | `configuracion.editar` | Cambia nombre y rol |
+| `PATCH /configuracion/usuarios/:id/activo` | `configuracion.editar` | Activa o desactiva (al desactivar se cierran sus sesiones) |
+| `POST /configuracion/usuarios/:id/codigo` | `configuracion.editar` | Genera el código de recuperación (se devuelve una sola vez) |
+| `GET /configuracion/roles`, `.../datos` | `configuracion.ver` | Roles y catálogo de permisos |
+| `POST /configuracion/roles` | `configuracion.crear` | Cuerpo: `nombre`, `descripcion`, `copiar_de` (opcional) |
+| `PUT /configuracion/roles/:id` | `configuracion.editar` | Nombre, descripción y estado |
+| `DELETE /configuracion/roles/:id` | `configuracion.eliminar` | Elimina un rol propio sin usuarios |
+| `GET`/`PUT /configuracion/roles/:id/permisos` | `ver` / `editar` | Lee o reemplaza los permisos (`permisos`: lista de ids) |
+| `GET /configuracion/auditoria`, `.../datos` | `configuracion.ver` | Últimos 50 movimientos |
+| `GET`/`POST /cambiar-contrasena` | Con sesión | Cambio de la propia contraseña (obligatorio si es provisional) |
+| `GET`/`POST /recuperar` | Pública | Usar el código de recuperación para elegir una contraseña nueva |
 
 ## Configuración opcional (`client.config.js` > `valoresPorDefecto`)
 
@@ -246,13 +270,14 @@ Ajustes en la base (`configuracion_negocio`): `zona_horaria` (para saber qué d�
    Después del primer despliegue, abrir `/salud` y probar el login.
 8. **Conectar el dominio propio** en Vercel > Settings > Domains y apuntar el DNS.
 
-Antes de entregarlo: cambiar las contraseñas de `admin` y `vendedor`.
+Antes de entregarlo: cambiar las contraseñas de las cuentas de demostración (`admin`, `vendedor`, `contador` y `supervisor`) o desactivarlas desde *Configuración → Usuarios*.
 
 ## Cómo funciona
 
 - **Sesión**: cookie firmada con `SESSION_SECRET` (`cookie-session`). No hay MemoryStore porque
   en Vercel cada petición puede caer en una instancia distinta.
-- **Roles**: `admin` ve todo, `vendedor` solo el POS.
+- **Roles y permisos**: cada usuario tiene un rol y cada rol un conjunto de permisos (`modulo.accion`). El servidor los lee en cada petición y `requirePermiso` responde 403 si falta alguno. El menú solo muestra lo permitido. Ver [permisos.md](permisos.md).
+- **Contraseñas**: se guardan con bcrypt (`pgcrypto`); 5 intentos fallidos bloquean la cuenta 15 minutos.
 - **Funcionalidades**: si una bandera de `client.config.js` está en `false`, el módulo no sale en el
   menú y su ruta responde 404.
 - **Tipos de pg**: `db.js` convierte BIGINT y NUMERIC a número y deja DATE como `'YYYY-MM-DD'`.
@@ -280,5 +305,5 @@ Antes de entregarlo: cambiar las contraseñas de `admin` y `vendedor`.
 
 ## Pendiente antes de producción real
 
-Las contraseñas están en texto plano y no hay CSRF, límite de intentos de login ni RLS. Es una
+No hay protección CSRF, ni límite de intentos por IP, ni RLS. Las contraseñas ya se guardan con bcrypt desde la Fase 7. Es una
 decisión del proyecto para la primera versión. El bloque de RLS opcional está al final de `db/migrations/01_schema_inicial.sql`.
