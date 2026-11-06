@@ -152,3 +152,4 @@ Estas contraseñas cumplen la política (8 o más caracteres, con letras y núme
 - **No hay verificación en dos pasos** ni vencimiento periódico de contraseñas.
 - **La cookie de sesión dura 12 horas** y se firma con `SESSION_SECRET`. Si esa variable se filtra, hay que cambiarla (cierra todas las sesiones).
 - **Las pruebas se hicieron contra Postgres local con un Supabase simulado.** Falta repetir la comprobación en el despliegue real de Vercel y Supabase.
+- **Recuperación del único administrador.** El código de recuperación lo genera un administrador. Si el único admin olvida su contraseña, la recuperación se hace con el procedimiento SQL de emergencia documentado en `docs/referencia-tecnica.md`. Una fase futura podría añadir recuperación por correo con SMTP.

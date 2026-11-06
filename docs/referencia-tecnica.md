@@ -307,3 +307,50 @@ Antes de entregarlo: cambiar las contraseñas de las cuentas de demostración (`
 
 No hay protección CSRF, ni límite de intentos por IP, ni RLS. Las contraseñas ya se guardan con bcrypt desde la Fase 7. Es una
 decisión del proyecto para la primera versión. El bloque de RLS opcional está al final de `db/migrations/01_schema_inicial.sql`.
+
+## Recuperación de emergencia del administrador
+
+**Por qué el flujo normal no cubre este caso.** Cuando una persona olvida su contraseña, un administrador genera un código temporal desde *Configuración → Usuarios → Resetear contraseña* y la persona lo usa en `/recuperar`. Generar ese código exige permisos de configuración, que solo tiene el rol `admin`. Si quien olvidó la contraseña es el **único administrador**, nadie puede generar el código y la pantalla `/recuperar` no tiene cómo ayudarle. Mientras haya dos o más administradores activos el problema no aparece, porque uno puede generar el código del otro.
+
+**Procedimiento.** Se ejecuta en el SQL Editor de Supabase, con la cuenta que administra el proyecto. Tiene dos pasos y un tercero de comprobación.
+
+Paso 1. Restablecer la contraseña:
+
+```sql
+UPDATE usuarios
+   SET contrasena = hash_contrasena('ClaveNueva123'),
+       debe_cambiar_contrasena = TRUE,
+       intentos_fallidos = 0,
+       bloqueado_hasta = NULL,
+       sesion_version = sesion_version + 1,
+       contrasena_cambiada_en = NOW()
+ WHERE usuario = 'admin';
+```
+
+Paso 2. Dejar constancia en la auditoría. El `UPDATE` por sí solo no deja ningún registro, por eso este paso forma parte del procedimiento:
+
+```sql
+SELECT registrar_auditoria(NULL, 'reset_emergencia', 'usuarios', id,
+       'Restablecimiento de emergencia de la contraseña de la cuenta ' || usuario || ' desde el SQL Editor de Supabase')
+  FROM usuarios
+ WHERE usuario = 'admin';
+```
+
+Paso 3 (opcional). Comprobar el resultado:
+
+```sql
+SELECT usuario, debe_cambiar_contrasena, sesion_version FROM usuarios WHERE usuario = 'admin';
+```
+
+Debe devolver una fila con `debe_cambiar_contrasena` en `true` y `sesion_version` aumentada en uno. Si no devuelve ninguna fila, el nombre de usuario escrito no coincide con el de la cuenta.
+
+**Advertencias.**
+
+- Elija una contraseña fuerte y distinta de la anterior, y escríbala en lugar de `ClaveNueva123` en el paso 1. Debe cumplir la política: 8 o más caracteres, con letras y números, y distinta del nombre de usuario. La función `hash_contrasena` no valida esa política, de modo que la comprobación es manual. Si la contraseña lleva comillas simples, deben duplicarse.
+- Por `debe_cambiar_contrasena = TRUE`, el administrador deberá cambiar esa contraseña en su siguiente inicio de sesión. Hasta que lo haga, el sistema no le permite usar ninguna otra pantalla. Conviene entregarla solo por un canal seguro.
+- Si el único administrador tiene otro nombre de usuario, hay que cambiar `'admin'` en los tres pasos.
+- No ejecute el paso 1 sin la cláusula `WHERE`: cambiaría la contraseña de todas las cuentas.
+
+**Qué ocurre al ejecutarlo.** El cambio sube `sesion_version`, así que cualquier sesión abierta del administrador con la contraseña vieja queda cerrada en su siguiente petición. También se borran los intentos fallidos y el bloqueo temporal, por lo que una cuenta bloqueada por intentos queda habilitada. El procedimiento se probó contra una base local con la aplicación en ejecución.
+
+**Solución definitiva.** Una fase futura podría añadir recuperación por correo electrónico con SMTP, para que cada persona inicie su propia recuperación sin depender de un administrador.

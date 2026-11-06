@@ -1,8 +1,6 @@
-<!-- COMPLETAR antes de entregar: horas dedicadas y enlaces de evidencia (commits o capturas). -->
-
 # Bitácora de la semana 4: login, roles y permisos
 
-**Periodo:** 2 al 8 de noviembre de 2026  ·  **Horas dedicadas:** `[COMPLETAR]`
+**Periodo:** 2 al 8 de noviembre de 2026  ·  **Horas dedicadas:** 20
 
 **Meta de la semana:** entregar "Login y Roles" a la universidad con una arquitectura de seguridad real: roles con permisos por módulo y acción, que el servidor haga cumplir y que quede registro de todo. Para lograrlo se tomaron tres decisiones de orden y alcance, todas conscientes y documentadas.
 
@@ -118,6 +116,7 @@ Casos que sirven para la demostración:
 - **Bloqueo en la recuperación.** Al quinto intento fallido con un código, la cuenta se bloqueaba pero la respuesta decía "código inválido" y no "bloqueada", distinto del inicio de sesión. Se unificó.
 - **Pruebas que asumían el comportamiento anterior.** Tres comprobaciones viejas daban por hecho que el vendedor no podía crear clientes ni ver Facturas. Eso contradice lo pedido en esta fase, así que se actualizaron a lo nuevo y se agregaron comprobaciones de que sí sigue sin poder crear categorías ni marcar facturas como pagadas.
 - **Dos pruebas con datos fijos.** La de Facturas tenía fechas de octubre y empezó a fallar el 1 de noviembre. La del POS tenía escrito el nombre "SportCenter Demo", que ya no coincide con el `client.config.js` real. No eran defectos del sistema. Ahora la primera no depende del mes y la segunda lee el nombre de la configuración.
+- **Recuperación cuando el único admin olvida su contraseña.** Al probar el flujo detecté este agujero: el código de recuperación lo genera un administrador desde Configuración → Usuarios, así que si el único admin es quien olvidó la contraseña, no puede generarse un código a sí mismo. La mitigación actual, documentada en `docs/referencia-tecnica.md`, es un reset de emergencia desde el SQL Editor de Supabase: se actualiza el hash con `hash_contrasena(...)` y se sube `sesion_version` para cerrar sesiones abiertas. El cambio se deja registrado en la auditoría con una segunda instrucción del mismo procedimiento. La solución definitiva (recuperación por correo con SMTP) queda para una fase futura.
 
 ## Qué aprendimos
 
@@ -135,11 +134,10 @@ Casos que sirven para la demostración:
 - **Las Estadísticas (Fase 6)** son lo siguiente y ya cuentan con quién vendió y con qué rol.
 - **Fase 8:** los avisos automáticos y el asistente con IA son ideas por validar con las pymes antes de construirse.
 - **Tabla `codigos_temporales`:** quedó de la Fase 1 sin uso y puede eliminarse en una migración futura.
-- Completar las horas y los enlaces de evidencia de esta bitácora.
 
 ## Evidencia
 
-- Commits de la semana: `[COMPLETAR]`
-- Captura de la matriz de permisos: `[COMPLETAR]`
-- Captura del 403 al entrar a `/finanzas` como vendedor: `[COMPLETAR]`
-- Captura de la auditoría con el acceso denegado: `[COMPLETAR]`
+- Commits de la semana: `58f3714` (código de la Fase 7: 27 archivos modificados + 14 nuevos) y el commit de documentación posterior.
+- Matriz de permisos: versionada en `docs/permisos.md` y consultable en Configuración → Roles y permisos. Release `semana-4`.
+- 403 del vendedor en `/finanzas`: cubierta por la batería de permisos por HTTP (114/114) y reproducible a mano. Release `semana-4`.
+- Auditoría del 403: visible en Configuración → Auditoría (últimos 50 movimientos) con usuario, ruta e IP. Release `semana-4`.
