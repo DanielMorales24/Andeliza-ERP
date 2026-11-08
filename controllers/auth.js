@@ -1,21 +1,28 @@
 // Inicio y cierre de sesión, cambio de contraseña y recuperación con código.
 const Usuarios = require('../models/usuarios');
 const Auditoria = require('../models/auditoria');
+const Negocio = require('../models/negocio');
 const { rutaInicial } = require('../modulos');
 
 const PAGINA_LOGIN = { layout: 'layouts/auth', titulo: 'Iniciar sesión' };
 
-function mostrarLogin(req, res) {
-  if (req.session && req.session.usuarioId) return res.redirect('/');
-  const exito = req.query.ok === 'recuperada' ? 'Tu contraseña cambió. Ya puedes iniciar sesión.' : '';
-  res.render('auth/login', { ...PAGINA_LOGIN, error: '', exito, usuario: '' });
+async function mostrarLogin(req, res, next) {
+  try {
+    if (req.session && req.session.usuarioId) return res.redirect('/');
+    const negocio = await Negocio.obtener();
+    const exito = req.query.ok === 'recuperada' ? 'Tu contraseña cambió. Ya puedes iniciar sesión.' : '';
+    res.render('auth/login', { ...PAGINA_LOGIN, error: '', exito, usuario: '', negocio });
+  } catch (err) {
+    next(err);
+  }
 }
 
 async function login(req, res, next) {
   try {
+    const negocio = await Negocio.obtener();
     const usuario = String(req.body.usuario || '').trim();
     const contrasena = String(req.body.contrasena || '');
-    const falla = (estado, error) => res.status(estado).render('auth/login', { ...PAGINA_LOGIN, error, exito: '', usuario });
+    const falla = (estado, error) => res.status(estado).render('auth/login', { ...PAGINA_LOGIN, error, exito: '', usuario, negocio });
 
     const r = await Usuarios.autenticar(usuario, contrasena, req.ip);
     if (!r.ok) {
