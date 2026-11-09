@@ -1,0 +1,94 @@
+<%
+  const iconoRol = { admin: 'shield', supervisor: 'badge', vendedor: 'bag', contador: 'calculator' }[perfil.rol] || 'user';
+  const iconoModulo = { dashboard: 'chart', pos: 'cart', inventario: 'box', categorias: 'box', clientes: 'users', proveedores: 'users', facturas: 'receipt', finanzas: 'cash', estadisticas: 'chart-bar', configuracion: 'cog' };
+  const tarjeta = 'rounded-lg border border-borde bg-white p-5';
+%>
+<div class="grid gap-6 lg:grid-cols-3">
+
+  <!-- Datos de la persona -->
+  <section class="<%= tarjeta %> lg:col-span-1" aria-labelledby="t-datos">
+    <div class="flex items-center gap-4">
+      <span class="relative inline-flex h-16 w-16 flex-none items-center justify-center rounded-full bg-primario font-titulo text-3xl font-semibold leading-none text-white">
+        <span aria-hidden="true"><%= (String(perfil.nombre).trim().charAt(0) || '?').toUpperCase() %></span>
+        <span class="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-white text-primario ring-1 ring-borde"><%- icono(iconoRol, 'h-3.5 w-3.5') %></span>
+      </span>
+      <div class="min-w-0">
+        <h2 id="t-datos" class="truncate font-titulo text-2xl font-semibold"><%= perfil.nombre %></h2>
+        <p class="truncate text-sm text-gray-500">@<%= perfil.usuario %></p>
+      </div>
+    </div>
+
+    <dl class="mt-5 divide-y divide-borde text-sm">
+      <div class="flex justify-between gap-4 py-2"><dt class="text-gray-500">Rol</dt><dd class="font-medium"><%= perfil.rol %></dd></div>
+      <% if (perfil.rol_descripcion) { %><div class="py-2 text-xs text-gray-500"><%= perfil.rol_descripcion %></div><% } %>
+      <div class="flex justify-between gap-4 py-2"><dt class="text-gray-500">Usuario</dt><dd class="font-medium"><%= perfil.usuario %></dd></div>
+      <div class="flex justify-between gap-4 py-2"><dt class="text-gray-500">Último acceso</dt><dd class="text-right font-medium tabular-nums"><%= perfil.ultimo_acceso ? fechaHora(perfil.ultimo_acceso) : 'Primer acceso' %></dd></div>
+      <div class="flex justify-between gap-4 py-2"><dt class="text-gray-500">Acceso anterior</dt><dd class="text-right font-medium tabular-nums"><%= anterior ? fechaHora(anterior) : 'Es tu primer acceso registrado' %></dd></div>
+      <div class="flex justify-between gap-4 py-2"><dt class="text-gray-500">Cuenta creada</dt><dd class="font-medium tabular-nums"><%= fecha(perfil.creado_en) %></dd></div>
+      <div class="flex justify-between gap-4 py-2"><dt class="text-gray-500">Contraseña cambiada</dt><dd class="font-medium tabular-nums"><%= perfil.contrasena_cambiada_en ? fecha(perfil.contrasena_cambiada_en) : 'Sin registro' %></dd></div>
+    </dl>
+    <p class="mt-2 text-xs text-gray-500">El último acceso es el inicio de la sesión actual. El acceso anterior es el inicio de sesión previo a este.</p>
+
+    <div class="mt-5 flex flex-col gap-2 sm:flex-row lg:flex-col">
+      <a href="/cambiar-contrasena" class="btn btn-primario h-11 justify-center">Cambiar mi contraseña</a>
+      <a href="/perfil/actividad" class="btn btn-secundario h-11 justify-center">Ver mi actividad</a>
+      <% if (usuarioActual.esAdmin) { %><a href="/configuracion" class="btn btn-secundario h-11 justify-center">Ir a Configuración</a><% } %>
+    </div>
+  </section>
+
+  <div class="space-y-6 lg:col-span-2">
+
+    <!-- Permisos de su rol, leídos de roles_permisos -->
+    <section class="<%= tarjeta %>" aria-labelledby="t-permisos">
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="t-permisos" class="font-titulo text-xl font-semibold">Tus permisos</h2>
+        <p class="text-sm text-gray-500"><span class="font-medium text-tinta"><%= permisosActivos %></span> de <%= permisosTotales %> permisos activos en el rol <span class="font-medium text-tinta"><%= perfil.rol %></span></p>
+      </div>
+      <div class="mt-3 overflow-x-auto">
+        <table class="w-full min-w-[520px] text-left text-sm" id="matriz-perfil">
+          <thead class="bg-fondo text-xs uppercase tracking-wide text-gray-500">
+            <tr>
+              <th scope="col" class="px-3 py-2 font-medium">Módulo</th>
+              <% acciones.forEach(function (a) { %><th scope="col" class="px-2 py-2 text-center font-medium"><%= a.etiqueta %></th><% }) %>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-borde">
+            <% matriz.forEach(function (m) { %>
+              <tr data-modulo="<%= m.modulo %>">
+                <th scope="row" class="px-3 py-2 font-medium"><%= m.etiqueta %></th>
+                <% acciones.forEach(function (a) {
+                     const definida = Object.prototype.hasOwnProperty.call(m.acciones, a.clave);
+                     const tiene = definida && m.acciones[a.clave]; %>
+                  <td class="px-2 py-2 text-center" data-permiso="<%= m.modulo + '.' + a.clave %>">
+                    <% if (!definida) { %><span class="text-gray-200" aria-hidden="true">·</span><span class="sr-only">No aplica</span>
+                    <% } else if (tiene) { %><span class="font-semibold text-emerald-600" title="Tiene este permiso">✔</span><span class="sr-only">Sí</span>
+                    <% } else { %><span class="text-gray-400" title="No tiene este permiso">—</span><span class="sr-only">No</span><% } %>
+                  </td>
+                <% }) %>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <p class="mt-2 text-xs text-gray-500">✔ = lo puedes hacer. — = no. «Solo propias» significa que ves únicamente lo que tú mismo generaste.</p>
+    </section>
+
+    <!-- Módulos que puede abrir -->
+    <section class="<%= tarjeta %>" aria-labelledby="t-modulos">
+      <h2 id="t-modulos" class="font-titulo text-xl font-semibold">Módulos disponibles</h2>
+      <% if (modulos.length) { %>
+        <ul class="mt-3 grid gap-2 sm:grid-cols-2">
+          <% modulos.forEach(function (m) { %>
+            <li>
+              <a href="<%= m.ruta %>" class="flex items-center gap-3 rounded-lg border border-borde px-4 py-3 text-sm font-medium transition hover:-translate-y-0.5 hover:border-primario/40 hover:shadow-sm">
+                <span class="text-primario"><%- icono(iconoModulo[m.clave] || 'chart', 'h-5 w-5') %></span><%= m.nombre %>
+              </a>
+            </li>
+          <% }) %>
+        </ul>
+      <% } else { %>
+        <p class="mt-3 text-sm text-gray-500">Tu rol todavía no tiene módulos asignados. Habla con el administrador.</p>
+      <% } %>
+    </section>
+  </div>
+</div>

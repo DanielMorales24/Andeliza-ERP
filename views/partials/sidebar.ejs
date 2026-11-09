@@ -19,4 +19,16 @@
       </a>
     <% }) %>
   </nav>
+
+  <!-- Parte fija: la cuenta de la persona. El texto de "title" sirve de ayuda al pasar el cursor -->
+  <div class="space-y-0.5 border-t border-white/15 px-3 py-3" aria-label="Mi cuenta">
+    <a href="/cambiar-contrasena" title="Cambiar contraseña" class="flex items-center gap-3 rounded px-3 py-2 text-[15px] font-medium text-white/75 hover:bg-white/10 hover:text-white">
+      <%- icono('key', 'h-5 w-5 flex-none') %><span class="truncate">Cambiar contraseña</span>
+    </a>
+    <form method="post" action="/logout">
+      <button type="submit" title="Salir" class="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-[15px] font-medium text-white/75 hover:bg-white/10 hover:text-white">
+        <%- icono('logout', 'h-5 w-5 flex-none') %><span class="truncate">Salir</span>
+      </button>
+    </form>
+  </div>
 </aside>

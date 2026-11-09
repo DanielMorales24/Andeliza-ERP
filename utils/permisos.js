@@ -44,6 +44,8 @@ function crearUsuarioSesion(f) {
     rolActivo: f.rol_activo,
     esAdmin,
     sesionVersion: f.sesion_version,
+    ultimoAcceso: f.ultimo_acceso || null,
+    creadoEn: f.creado_en || null,
     debeCambiar: f.debe_cambiar_contrasena,
     permisos,
     // ¿Puede hacer esta acción en este módulo?

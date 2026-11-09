@@ -1,0 +1,52 @@
+<%
+  // Nombres legibles para las acciones más comunes. Las demás se muestran con su código sin guiones bajos.
+  const nombres = {
+    login: 'Inicio de sesión', logout: 'Cierre de sesión', login_fallido: 'Intento fallido de inicio', cuenta_bloqueada: 'Cuenta bloqueada',
+    cambiar_contrasena: 'Cambio de contraseña', cambio_contrasena_fallido: 'Cambio de contraseña fallido', recuperar_contrasena: 'Recuperación de contraseña',
+    acceso_denegado: 'Acceso denegado', crear_venta: 'Venta registrada', exportar_estadisticas: 'Reporte exportado',
+  };
+  const nombreAccion = (a) => nombres[a] || String(a).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  const rojo = (a) => ['login_fallido', 'cuenta_bloqueada', 'acceso_denegado', 'cambio_contrasena_fallido'].indexOf(a) !== -1;
+%>
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <p class="text-sm text-gray-600">Tus últimos <%= filas.length %> movimientos. Solo ves los tuyos.</p>
+  <a href="/perfil" class="btn btn-secundario h-10 px-4">Volver a mi perfil</a>
+</div>
+
+<% if (!filas.length) { %>
+  <div class="mt-4 rounded-lg border border-dashed border-borde bg-white px-6 py-12 text-center">
+    <span class="inline-flex text-gray-400"><%- icono('clock', 'h-8 w-8') %></span>
+    <p class="mt-3 font-medium">Todavía no hay movimientos registrados</p>
+    <p class="mt-1 text-sm text-gray-500">Aquí aparecerán tus inicios de sesión y las acciones importantes que hagas.</p>
+  </div>
+<% } else { %>
+  <div class="mt-4 hidden overflow-hidden rounded-lg border border-borde bg-white md:block">
+    <table class="w-full text-left text-sm" id="tabla-actividad">
+      <thead class="bg-fondo text-xs uppercase tracking-wide text-gray-500">
+        <tr><th class="px-4 py-3 font-medium">Fecha y hora</th><th class="px-4 py-3 font-medium">Acción</th><th class="px-4 py-3 font-medium">Entidad</th><th class="px-4 py-3 font-medium">Descripción</th><th class="px-4 py-3 font-medium">IP</th></tr>
+      </thead>
+      <tbody class="divide-y divide-borde">
+        <% filas.forEach(function (f) { %>
+          <tr class="<%= rojo(f.accion) ? 'bg-red-50/60' : '' %>">
+            <td class="whitespace-nowrap px-4 py-2.5 tabular-nums text-gray-600"><%= fechaHora(f.creado_en) %></td>
+            <td class="px-4 py-2.5 font-medium"><%= nombreAccion(f.accion) %></td>
+            <td class="px-4 py-2.5 text-gray-600"><%= f.entidad || '—' %><%= f.entidad_id ? ' #' + f.entidad_id : '' %></td>
+            <td class="px-4 py-2.5"><%= f.descripcion %></td>
+            <td class="whitespace-nowrap px-4 py-2.5 text-xs text-gray-500"><%= f.ip || '—' %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+
+  <ul class="mt-4 space-y-2 md:hidden">
+    <% filas.forEach(function (f) { %>
+      <li class="rounded-lg border bg-white p-3 text-sm <%= rojo(f.accion) ? 'border-red-200' : 'border-borde' %>">
+        <p class="font-medium"><%= nombreAccion(f.accion) %></p>
+        <p class="mt-0.5 text-gray-700"><%= f.descripcion %></p>
+        <p class="mt-1 text-xs text-gray-500"><%= fechaHora(f.creado_en) %><% if (f.ip) { %> · <%= f.ip %><% } %></p>
+      </li>
+    <% }) %>
+  </ul>
+  <p class="mt-4 text-xs text-gray-500">Si ves algo que no reconoces, cambia tu contraseña y avisa al administrador.</p>
+<% } %>

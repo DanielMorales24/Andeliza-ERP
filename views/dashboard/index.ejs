@@ -1,63 +1,175 @@
 <%
+  // Panel de inicio. Cada bloque aparece solo si la persona puede verlo (d.ve) y hay algo que mostrar.
   const plural = (n, uno, varios) => n + ' ' + (n === 1 ? uno : varios);
-  const hay = (clave) => modulosVisibles(usuarioActual).some((m) => m.clave === clave);
+  const pct = (v) => (Number.isInteger(v) ? v : Number(v).toFixed(1)) + '%';
+  const b = d.bienvenida; const hv = d.hoyVsAyer; const fa = d.facturacion;
+  const tonos = {
+    verde: { circulo: 'bg-emerald-50 text-emerald-600', texto: 'text-emerald-700' },
+    rojo: { circulo: 'bg-red-50 text-red-600', texto: 'text-red-700' },
+    ambar: { circulo: 'bg-amber-50 text-amber-600', texto: 'text-amber-700' },
+    gris: { circulo: 'bg-primario/10 text-primario', texto: 'text-gray-500' },
+  };
 
-  const tarjetas = [
-    { etiqueta: 'Ventas de hoy',       valor: dinero(resumen.ventasDia),       detalle: plural(resumen.cantidadDia, 'venta', 'ventas') },
-    { etiqueta: 'Ventas del mes',      valor: dinero(resumen.ventasMes),       detalle: plural(resumen.cantidadMes, 'venta', 'ventas') },
-    { etiqueta: 'Ticket promedio',     valor: dinero(resumen.ticketPromedio),  detalle: 'Este mes' },
-    { etiqueta: 'Stock bajo',          valor: resumen.stockBajo,               detalle: resumen.stockBajo === 1 ? 'artículo por reponer' : 'artículos por reponer', alerta: resumen.stockBajo > 0 },
-    { etiqueta: 'Facturas pendientes', valor: resumen.facturasPendientes,      detalle: 'Por cobrar' },
-  ];
+  // ---- Insights del día ----
+  const tarjetas = [];
+  let det = ''; let tono = 'gris';
+  if (hv.variacionPct !== null) { det = (hv.variacionPct > 0 ? '▲ ' : hv.variacionPct < 0 ? '▼ ' : '') + pct(Math.abs(hv.variacionPct)) + ' frente a ayer (' + dinero(hv.ayer) + ')'; tono = hv.variacionPct > 0 ? 'verde' : hv.variacionPct < 0 ? 'rojo' : 'gris'; }
+  else if (hv.hoy === 0 && hv.ayer === 0) det = 'Sin ventas hoy ni ayer';
+  else det = 'Ayer no hubo ventas para comparar';
+  tarjetas.push({ icono: hv.variacionPct !== null && hv.variacionPct < 0 ? 'trend-down' : 'trend-up', etiqueta: 'Ventas de hoy', valor: dinero(hv.hoy), detalle: det, tono: tono, id: 'ventas-hoy' });
+  if (d.cxc) tarjetas.push({ icono: 'cash', etiqueta: 'Cuentas por cobrar', valor: dinero(d.cxc.total), detalle: d.cxc.vencido > 0 ? dinero(d.cxc.vencido) + ' vencidas' : (d.cxc.total > 0 ? 'Nada vencido' : 'Sin cuentas por cobrar'), tono: d.cxc.vencido > 0 ? 'rojo' : 'gris', id: 'cxc', enlace: '/finanzas/cxc' });
+  tarjetas.push({ icono: 'box', etiqueta: 'Stock bajo', valor: d.stockBajo, detalle: d.stockBajo === 0 ? 'Todo el inventario en orden' : (d.stockBajo === 1 ? 'artículo por reponer' : 'artículos por reponer'), tono: d.stockBajo > 0 ? 'ambar' : 'verde', id: 'stock-bajo' });
+  if (fa) {
+    if (fa.modo === 'interno') {
+      tarjetas.push({ icono: 'receipt', etiqueta: 'Facturación interna', valor: fa.siguiente || '—', detalle: 'Siguiente comprobante. Sin CAI activo, las ventas usan numeración propia.', tono: 'gris', id: 'facturacion' });
+    } else {
+      const venc = fa.dias < 0; const agot = fa.restantes <= 0; const urg = venc || agot || fa.restantes <= 5 || fa.dias <= 7;
+      tarjetas.push({
+        icono: 'receipt', etiqueta: 'Facturación con CAI', valor: venc ? 'Vencido' : agot ? 'Agotado' : fa.restantes, tono: urg ? 'rojo' : (fa.dias <= 30 ? 'ambar' : 'gris'), id: 'facturacion',
+        detalle: venc ? 'La fecha límite de emisión venció el ' + fecha(fa.fechaLimite) + '. No se podrá facturar hasta registrar un nuevo CAI.'
+               : agot ? 'Se agotó el rango de numeración. No se podrá facturar hasta registrar un nuevo rango.'
+               : 'Quedan ' + fa.restantes + ' ' + (Number(fa.restantes) === 1 ? 'número' : 'números') + ' y vence el ' + fecha(fa.fechaLimite) + '.',
+      });
+    }
+  }
+
+  // ---- Accesos rápidos con contexto ----
+  const accesos = [];
+  if (d.ve.pos) accesos.push({ href: '/pos', icono: 'cart', titulo: 'Cobrar venta', sub: d.stockBajo > 0 ? plural(d.stockBajo, 'producto en stock bajo', 'productos en stock bajo') : 'Todo el inventario en orden' });
+  if (d.ve.inventario) accesos.push({ href: '/inventario', icono: 'box', titulo: 'Ver inventario', sub: plural(d.totalProductos || 0, 'producto activo', 'productos activos') });
+  if (d.ve.finanzas) accesos.push({ href: '/finanzas/cxc', icono: 'cash', titulo: 'Gestionar cartera', sub: d.cxc && d.cxc.total > 0 ? dinero(d.cxc.total) + ' por cobrar' : 'Sin cuentas por cobrar' });
+  if (d.ve.estadisticas) accesos.push({ href: '/estadisticas', icono: 'chart-bar', titulo: 'Ver estadísticas', sub: 'Ver insights del mes · ' + dinero(d.mes.ventas) + ' vendidos' });
+
+  const iniciales = (t) => (String(t).trim().charAt(0) || '?').toUpperCase();
+  const tarjetaBase = 'rounded-lg border border-borde bg-white';
 %>
+<script type="application/json" id="datos-pagina"><%- JSON.stringify({ serie: d.serie30 }).replace(/</g, '\\u003c') %></script>
 
-<p class="text-sm text-gray-600">Hoy es <%= fecha(new Date()) %>.</p>
+<!-- 1. Bienvenida contextual -->
+<section aria-label="Bienvenida">
+  <h2 class="font-titulo text-3xl font-semibold leading-tight sm:text-4xl" id="saludo"><%= b.saludo %>, <%= b.nombre %>.</h2>
+  <p class="mt-1 text-gray-600">Hoy es <%= b.fechaLarga %>.</p>
+  <p class="mt-3 inline-flex flex-wrap items-center gap-x-2 rounded-full border border-borde bg-white px-4 py-1.5 text-sm" id="resumen-hoy">
+    <span>Hoy: <strong class="tabular-nums"><%= dinero(b.ventasHoy) %></strong> en <%= plural(b.facturasHoy, 'venta', 'ventas') %></span>
+    <span class="text-gray-300" aria-hidden="true">·</span>
+    <span><%= plural(b.pendientes, 'factura pendiente', 'facturas pendientes') %> de cobro</span>
+  </p>
+</section>
 
-<% if (resumen.facturacion) {
-     const fa = resumen.facturacion;
-     const urgente = fa.modo === 'sar' && (fa.restantes <= 5 || fa.dias < 0 || fa.dias <= 30); %>
-  <div class="mt-4 rounded-md border px-4 py-3 text-sm <%= urgente ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-borde bg-white text-gray-700' %>">
-    <% if (fa.modo === 'interno') { %>
-      <span class="font-medium">Facturación interna.</span>
-      No hay una configuración fiscal activa, así que las ventas usan numeración propia<% if (fa.siguiente) { %>. La siguiente será <span class="font-medium tabular-nums"><%= fa.siguiente %></span><% } %>.
-    <% } else { %>
-      <span class="font-medium">Facturación con CAI.</span>
-      <% if (fa.dias < 0) { %>
-        La fecha límite de emisión venció el <%= fecha(fa.fechaLimite) %>. No se podrá facturar hasta registrar un nuevo CAI.
-      <% } else if (fa.restantes <= 0) { %>
-        Se agotó el rango de numeración. No se podrá facturar hasta registrar un nuevo rango.
-      <% } else { %>
-        Quedan <%= fa.restantes %> <%= fa.restantes === 1 ? 'número' : 'números' %> y vence el <%= fecha(fa.fechaLimite) %>.
-      <% } %>
-    <% } %>
-  </div>
+<!-- 7. Alertas del sistema: solo si aplican -->
+<% if (d.alertas.length) { %>
+  <section class="mt-5 space-y-2" aria-label="Alertas del sistema" id="alertas">
+    <% d.alertas.forEach(function (a) { const rojo = a.nivel === 'urgente'; %>
+      <div role="alert" class="flex flex-wrap items-start gap-3 rounded-lg border px-4 py-3 text-sm <%= rojo ? 'border-red-200 bg-red-50 text-red-900' : 'border-amber-200 bg-amber-50 text-amber-900' %>" data-alerta="<%= a.nivel %>">
+        <span class="mt-0.5 flex-none"><%- icono('alert', 'h-5 w-5') %></span>
+        <p class="min-w-0 flex-1"><span class="font-semibold"><%= a.titulo %>.</span> <%= a.texto %></p>
+        <% if (a.enlace) { %><a href="<%= a.enlace.href %>" class="flex-none font-medium underline underline-offset-2"><%= a.enlace.texto %></a><% } %>
+      </div>
+    <% }) %>
+  </section>
 <% } %>
 
-<section class="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5" aria-label="Resumen">
-  <% tarjetas.forEach(function (t) { %>
-    <article class="rounded-md border border-borde bg-white p-4">
-      <p class="text-sm text-gray-600"><%= t.etiqueta %></p>
-      <p class="mt-1 font-titulo text-3xl font-semibold <%= t.alerta ? 'text-amber-700' : '' %>"><%= t.valor %></p>
-      <p class="mt-1 text-sm text-gray-500"><%= t.detalle %></p>
-    </article>
+<!-- 2. Insights del día -->
+<section class="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-<%= Math.min(tarjetas.length, 4) %>" aria-label="Resumen del día" id="insights">
+  <% tarjetas.forEach(function (t) { const c = tonos[t.tono] || tonos.gris; %>
+    <<%- t.enlace ? 'a href="' + t.enlace + '"' : 'article' %> class="<%= tarjetaBase %> flex items-start gap-3 p-4 <%= t.enlace ? 'transition hover:-translate-y-0.5 hover:shadow-md' : '' %>" data-insight="<%= t.id %>">
+      <span class="flex h-10 w-10 flex-none items-center justify-center rounded-full <%= c.circulo %>"><%- icono(t.icono, 'h-5 w-5') %></span>
+      <div class="min-w-0">
+        <p class="text-sm text-gray-600"><%= t.etiqueta %></p>
+        <p class="mt-0.5 truncate font-titulo text-3xl font-semibold tabular-nums <%= t.tono === 'rojo' ? 'text-red-700' : t.tono === 'ambar' ? 'text-amber-700' : '' %>"><%= t.valor %></p>
+        <p class="mt-0.5 text-sm <%= c.texto %>"><%= t.detalle %></p>
+      </div>
+    </<%= t.enlace ? 'a' : 'article' %>>
   <% }) %>
 </section>
 
-<section class="mt-6 flex flex-wrap gap-3" aria-label="Accesos rápidos">
-  <% if (hay('pos')) { %>
-    <a href="/pos" class="rounded bg-primario px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110">Nueva venta</a>
-  <% } %>
-  <% if (hay('inventario')) { %>
-    <a href="/inventario" class="rounded border border-borde bg-white px-4 py-2.5 text-sm font-semibold hover:bg-fondo">Ver inventario</a>
-  <% } %>
-  <% if (hay('finanzas')) { %>
-    <a href="/finanzas" class="rounded border border-borde bg-white px-4 py-2.5 text-sm font-semibold hover:bg-fondo">Ver finanzas</a>
-  <% } %>
-</section>
-
-<section class="mt-6 rounded-md border border-borde bg-white p-4">
-  <h2 class="font-titulo text-lg font-semibold">Ventas de los últimos 30 días</h2>
-  <div class="mt-3 flex h-56 items-center justify-center rounded border border-dashed border-borde text-sm text-gray-500">
-    El gráfico se activa con la fase de estadísticas.
+<!-- 3. Gráfico principal -->
+<section class="<%= tarjetaBase %> mt-6 p-4 sm:p-5" aria-labelledby="t-grafico" x-data="dashboardPagina">
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+    <h2 id="t-grafico" class="font-titulo text-xl font-semibold">Ventas de los últimos 30 días</h2>
+    <p class="text-sm text-gray-500" x-show="!sinVentas" x-text="resumen"></p>
+  </div>
+  <div class="relative mt-3 h-56 sm:h-64" x-show="!sinVentas"><canvas id="grafico-ventas" role="img" aria-label="Gráfico de las ventas diarias de los últimos 30 días"></canvas></div>
+  <div class="mt-3 flex h-40 flex-col items-center justify-center rounded border border-dashed border-borde text-center text-sm text-gray-500" x-show="sinVentas" x-cloak>
+    <span class="text-gray-400"><%- icono('chart', 'h-7 w-7') %></span>
+    <p class="mt-2">Aún no hay ventas en los últimos 30 días.</p>
+    <p>Cuando registres la primera, aquí verás cómo se mueven tus ventas.</p>
   </div>
 </section>
+
+<!-- 4. Accesos rápidos con contexto -->
+<% if (accesos.length) { %>
+  <section class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-<%= Math.min(accesos.length, 4) %>" aria-label="Accesos rápidos" id="accesos">
+    <% accesos.forEach(function (a) { %>
+      <a href="<%= a.href %>" class="<%= tarjetaBase %> group flex items-center gap-4 p-4 transition duration-150 hover:-translate-y-0.5 hover:border-primario/40 hover:shadow-md">
+        <span class="flex h-11 w-11 flex-none items-center justify-center rounded-lg bg-primario text-white"><%- icono(a.icono, 'h-6 w-6') %></span>
+        <span class="min-w-0">
+          <span class="block font-semibold"><%= a.titulo %></span>
+          <span class="block truncate text-sm text-gray-500"><%= a.sub %></span>
+        </span>
+      </a>
+    <% }) %>
+  </section>
+<% } %>
+
+<div class="mt-6 grid gap-6 <%= d.ultimasVentas ? 'lg:grid-cols-3' : '' %>">
+
+  <!-- 5. Top 5 productos del mes -->
+  <section class="<%= tarjetaBase %> p-4 sm:p-5" aria-labelledby="t-top" id="top-productos">
+    <h2 id="t-top" class="font-titulo text-xl font-semibold">Los 5 productos del mes</h2>
+    <% if (!d.topProductos.length) { %>
+      <p class="mt-3 text-sm text-gray-500">Todavía no hay ventas este mes.</p>
+    <% } else { %>
+      <ol class="mt-3 divide-y divide-borde">
+        <% d.topProductos.forEach(function (p, i) { %>
+          <li class="flex items-center gap-3 py-2.5">
+            <span class="w-4 flex-none text-center text-sm font-semibold text-gray-400"><%= i + 1 %></span>
+            <% if (p.imagen_url) { %>
+              <img src="<%= p.imagen_url %>" alt="" class="h-10 w-10 flex-none rounded bg-fondo object-cover" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'), { className: 'flex h-10 w-10 flex-none items-center justify-center rounded bg-fondo text-sm font-semibold text-gray-500', textContent: '<%= iniciales(p.nombre) %>' }))">
+            <% } else { %>
+              <span class="flex h-10 w-10 flex-none items-center justify-center rounded bg-fondo text-sm font-semibold text-gray-500"><%= iniciales(p.nombre) %></span>
+            <% } %>
+            <span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium"><%= p.nombre %></span><span class="block text-xs text-gray-500"><%= dinero(p.monto) %></span></span>
+            <span class="flex-none text-right text-sm font-semibold tabular-nums"><%= Number.isInteger(Number(p.unidades)) ? p.unidades : Number(p.unidades).toFixed(2) %> <span class="text-xs font-normal text-gray-500">u.</span></span>
+          </li>
+        <% }) %>
+      </ol>
+    <% } %>
+  </section>
+
+  <!-- 6. Últimas 5 ventas: solo con facturas.ver (todas) o facturas.ver_propias (las propias) -->
+  <% if (d.ultimasVentas) { %>
+    <section class="<%= tarjetaBase %> p-4 sm:p-5 lg:col-span-2" aria-labelledby="t-ultimas" id="ultimas-ventas">
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="t-ultimas" class="font-titulo text-xl font-semibold">Últimas ventas<% if (d.soloPropias) { %> <span class="text-sm font-normal text-gray-500">(solo las tuyas)</span><% } %></h2>
+        <a href="/facturas" class="text-sm font-medium text-primario hover:underline">Ver todas</a>
+      </div>
+      <% if (!d.ultimasVentas.length) { %>
+        <p class="mt-3 text-sm text-gray-500">Todavía no hay ventas registradas.</p>
+      <% } else { %>
+        <div class="mt-3 overflow-x-auto">
+          <table class="w-full min-w-[560px] text-left text-sm">
+            <thead class="text-xs uppercase tracking-wide text-gray-500">
+              <tr><th class="py-2 pr-3 font-medium">Hora</th><th class="py-2 pr-3 font-medium">Número</th><th class="py-2 pr-3 font-medium">Cliente</th><th class="py-2 pr-3 font-medium">Vendedor</th><th class="py-2 pr-3 text-right font-medium">Total</th><th class="py-2 text-right font-medium">Estado</th></tr>
+            </thead>
+            <tbody class="divide-y divide-borde">
+              <% d.ultimasVentas.forEach(function (v) { %>
+                <tr>
+                  <td class="whitespace-nowrap py-2 pr-3 tabular-nums text-gray-600"><%= fechaHora(v.creado_en) %></td>
+                  <td class="whitespace-nowrap py-2 pr-3 font-medium"><%= v.numero_factura %></td>
+                  <td class="max-w-[10rem] truncate py-2 pr-3"><%= v.cliente %></td>
+                  <td class="max-w-[9rem] truncate py-2 pr-3 text-gray-600"><%= v.vendedor || '—' %></td>
+                  <td class="whitespace-nowrap py-2 pr-3 text-right font-medium tabular-nums"><%= dinero(v.total) %></td>
+                  <td class="py-2 text-right"><span class="insignia <%= v.estado === 'C' ? 'ins-ok' : 'ins-neutra' %>"><%= v.estado === 'C' ? 'Cobrada' : 'Pendiente' %></span></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </section>
+  <% } %>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="/js/dashboard.js"></script>

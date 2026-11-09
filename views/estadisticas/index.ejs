@@ -1,0 +1,201 @@
+<script type="application/json" id="datos-pagina"><%- JSON.stringify(datos).replace(/</g, '\\u003c') %></script>
+
+<div x-data="estadisticasPagina" @keydown.escape.window="rangoAbierto = false">
+
+  <!-- Filtros -->
+  <section class="rounded-lg border border-borde bg-white p-4" aria-label="Filtros de estadísticas">
+    <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Período">
+      <template x-for="p in listaPeriodos" :key="p.clave">
+        <button type="button" :data-periodo="p.clave" @click="elegirPeriodo(p.clave)" :aria-pressed="filtros.periodo === p.clave"
+                class="rounded-full border px-3 py-1.5 text-sm font-medium transition"
+                :class="filtros.periodo === p.clave ? 'border-primario bg-primario text-white' : 'border-borde bg-white hover:bg-fondo'" x-text="p.nombre"></button>
+      </template>
+      <div class="relative">
+        <button type="button" id="btn-rango" @click="abrirRango()" :aria-expanded="rangoAbierto"
+                class="rounded-full border px-3 py-1.5 text-sm font-medium transition"
+                :class="filtros.periodo === 'personalizado' ? 'border-primario bg-primario text-white' : 'border-borde bg-white hover:bg-fondo'">Rango personalizado</button>
+        <div x-show="rangoAbierto" x-cloak @click="rangoAbierto = false" class="fixed inset-0 z-30" aria-hidden="true"></div>
+        <form x-show="rangoAbierto" x-cloak @submit.prevent="aplicarRango()" id="popover-rango" role="dialog" aria-label="Rango personalizado"
+              class="absolute left-0 top-full z-40 mt-2 w-72 rounded-lg border border-borde bg-white p-4 shadow-lg">
+          <label for="rango-desde" class="etiqueta">Desde</label>
+          <input id="rango-desde" type="date" class="campo" x-model="borrador.desde" min="2000-01-01" :max="d.hoy" required>
+          <label for="rango-hasta" class="etiqueta mt-3">Hasta</label>
+          <input id="rango-hasta" type="date" class="campo" x-model="borrador.hasta" min="2000-01-01" :max="d.hoy" required>
+          <p x-show="errorRango" x-cloak role="alert" class="mt-2 text-sm text-red-700" x-text="errorRango"></p>
+          <div class="mt-4 flex gap-2">
+            <button type="button" class="btn btn-secundario h-10 flex-1" @click="rangoAbierto = false">Cancelar</button>
+            <button type="submit" class="btn btn-primario h-10 flex-1">Aplicar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="mt-3 flex flex-wrap items-end gap-3">
+      <div class="min-w-[11rem] flex-1 sm:flex-none">
+        <label for="f-vendedor" class="etiqueta">Vendedor</label>
+        <select id="f-vendedor" class="campo" x-model="filtros.vendedor" @change="cargar()">
+          <option value="">Todos los vendedores</option>
+          <template x-for="v in d.vendedores" :key="v.id"><option :value="String(v.id)" x-text="v.nombre"></option></template>
+        </select>
+      </div>
+      <div class="min-w-[11rem] flex-1 sm:flex-none">
+        <label for="f-categoria" class="etiqueta">Categoría</label>
+        <select id="f-categoria" class="campo" x-model="filtros.categoria" @change="cargar()">
+          <option value="">Todas las categorías</option>
+          <template x-for="c in d.categorias" :key="c.id"><option :value="String(c.id)" x-text="c.nombre"></option></template>
+        </select>
+      </div>
+      <a id="btn-pdf" :href="urlPdf" target="_blank" rel="noopener" class="btn btn-secundario ml-auto h-11 px-5" :class="r ? '' : 'pointer-events-none opacity-50'" :aria-disabled="!r">Exportar PDF</a>
+    </div>
+
+    <p class="mt-3 text-sm text-gray-600" id="texto-rango" x-text="textoRango"></p>
+  </section>
+
+  <p class="mt-3 text-sm text-gray-500" x-show="cargando && !r" x-cloak>Calculando estadísticas…</p>
+
+  <div x-show="error" x-cloak role="alert" class="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+    <span class="flex-1" x-text="error"></span>
+    <button type="button" class="btn btn-secundario h-9 px-4" @click="cargar()">Reintentar</button>
+  </div>
+
+  <!-- Sin ventas en el período -->
+  <section x-show="r && r.vacio" x-cloak id="estado-vacio" class="mt-4 rounded-lg border border-dashed border-borde bg-white px-6 py-14 text-center">
+    <span class="inline-flex text-gray-400"><%- icono('chart-bar', 'h-9 w-9') %></span>
+    <p class="mt-3 font-titulo text-2xl font-semibold">No hay ventas en este período</p>
+    <p class="mx-auto mt-1 max-w-md text-sm text-gray-500">Con los filtros elegidos no se registró ninguna venta. Prueba con otro rango de fechas o quita el filtro de vendedor o de categoría.</p>
+    <div class="mt-5 flex flex-wrap justify-center gap-2">
+      <button type="button" class="btn btn-secundario h-10 px-4" @click="elegirPeriodo('anio')">Ver este año</button>
+      <button type="button" class="btn btn-primario h-10 px-4" @click="elegirPeriodo('todo')">Ver todo</button>
+    </div>
+  </section>
+
+  <div x-show="r && !r.vacio" x-cloak :class="cargando ? 'opacity-60 transition-opacity' : 'transition-opacity'" id="contenido">
+
+    <!-- Insights automáticos -->
+    <section class="mt-4" aria-label="Lo más importante del período" x-show="r && r.insights.length">
+      <ul class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" id="lista-insights">
+        <template x-for="i in (r ? r.insights : [])" :key="i.clave">
+          <li class="flex items-start gap-3 rounded-lg border px-4 py-3" :class="clasesTono(i.tono)" :data-insight="i.clave">
+            <span class="mt-0.5 flex-none" x-html="Iconos.icono(i.icono, 'h-5 w-5')"></span>
+            <p class="min-w-0 flex-1 text-sm"><span x-text="i.texto"></span> <a x-show="i.enlace" :href="i.enlace" class="font-medium underline underline-offset-2">Ver</a></p>
+          </li>
+        </template>
+      </ul>
+    </section>
+
+    <!-- Indicadores comparados con el período anterior -->
+    <section class="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6" aria-label="Indicadores" x-show="r">
+      <article class="rounded-lg border border-borde bg-white p-4" data-kpi="ventas">
+        <p class="text-sm text-gray-600">Ventas totales</p>
+        <p class="mt-1 truncate font-titulo text-2xl font-semibold tabular-nums" x-text="r ? dinero(r.kpis.ventasTotales.valor) : ''"></p>
+        <p class="mt-1 text-xs font-medium" :class="delta(r && r.kpis.ventasTotales).clase" :title="tituloDelta" x-text="delta(r && r.kpis.ventasTotales).texto"></p>
+        <p class="text-xs text-gray-400">Incluye impuesto</p>
+      </article>
+      <article class="rounded-lg border border-borde bg-white p-4" data-kpi="facturas">
+        <p class="text-sm text-gray-600">Facturas emitidas</p>
+        <p class="mt-1 font-titulo text-2xl font-semibold tabular-nums" x-text="r ? r.kpis.facturas.valor : ''"></p>
+        <p class="mt-1 text-xs font-medium" :class="delta(r && r.kpis.facturas).clase" :title="tituloDelta" x-text="delta(r && r.kpis.facturas).texto"></p>
+      </article>
+      <article class="rounded-lg border border-borde bg-white p-4" data-kpi="ticket">
+        <p class="text-sm text-gray-600">Ticket promedio</p>
+        <p class="mt-1 truncate font-titulo text-2xl font-semibold tabular-nums" x-text="r ? dinero(r.kpis.ticketPromedio.valor) : ''"></p>
+        <p class="mt-1 text-xs font-medium" :class="delta(r && r.kpis.ticketPromedio).clase" :title="tituloDelta" x-text="delta(r && r.kpis.ticketPromedio).texto"></p>
+      </article>
+      <article class="rounded-lg border border-borde bg-white p-4" data-kpi="margen">
+        <p class="text-sm text-gray-600">Margen bruto</p>
+        <p class="mt-1 truncate font-titulo text-2xl font-semibold tabular-nums" x-text="r ? dinero(r.kpis.margenBruto.valor) : ''"></p>
+        <p class="mt-1 text-sm font-semibold tabular-nums" x-text="r ? r.kpis.margenBruto.pct + '%' : ''"></p>
+        <p class="text-xs font-medium" :class="deltaPuntos.clase" :title="tituloDelta" x-text="deltaPuntos.texto"></p>
+        <p class="mt-0.5 text-xs text-amber-700" x-show="r && r.kpis.margenBruto.coberturaCostoPct < 100" x-cloak x-text="r ? 'Costo registrado en el ' + r.kpis.margenBruto.coberturaCostoPct + '% de las ventas' : ''"></p>
+        <p class="text-xs text-gray-400">Sobre ventas sin impuesto</p>
+      </article>
+      <article class="rounded-lg border border-borde bg-white p-4" data-kpi="productos">
+        <p class="text-sm text-gray-600">Productos distintos</p>
+        <p class="mt-1 font-titulo text-2xl font-semibold tabular-nums" x-text="r ? r.kpis.productosDistintos.valor : ''"></p>
+        <p class="mt-1 text-xs font-medium" :class="delta(r && r.kpis.productosDistintos).clase" :title="tituloDelta" x-text="delta(r && r.kpis.productosDistintos).texto"></p>
+      </article>
+      <article class="rounded-lg border border-borde bg-white p-4" data-kpi="documentos">
+        <p class="text-sm text-gray-600">Fiscales vs internas</p>
+        <p class="mt-1 font-titulo text-2xl font-semibold tabular-nums" x-text="r ? r.kpis.documentos.pctFiscal + '% / ' + r.kpis.documentos.pctInterno + '%' : ''"></p>
+        <div class="mt-2 flex h-2 overflow-hidden rounded-full bg-fondo" aria-hidden="true"><div class="bg-primario" :style="r ? 'width:' + r.kpis.documentos.pctFiscal + '%' : ''"></div><div class="bg-acento" :style="r ? 'width:' + r.kpis.documentos.pctInterno + '%' : ''"></div></div>
+        <p class="mt-1 text-xs text-gray-500" x-text="r ? r.kpis.documentos.fiscales + ' fiscales, ' + r.kpis.documentos.internas + ' internas' : ''"></p>
+      </article>
+    </section>
+
+    <!-- Gráficos -->
+    <section class="mt-4 rounded-lg border border-borde bg-white p-4 sm:p-5" aria-labelledby="t-serie">
+      <h2 id="t-serie" class="font-titulo text-xl font-semibold" x-text="r ? 'Ventas por ' + ({ dia: 'día', semana: 'semana', mes: 'mes' })[r.serie.agrupar] : 'Ventas'"></h2>
+      <div class="relative mt-3 h-64"><canvas id="grafico-serie" role="img" aria-label="Gráfico de ventas a lo largo del período"></canvas></div>
+    </section>
+
+    <div class="mt-4 grid gap-4 lg:grid-cols-2">
+      <section class="rounded-lg border border-borde bg-white p-4 sm:p-5" aria-labelledby="t-top">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="t-top" class="font-titulo text-xl font-semibold">Los 10 productos más vendidos</h2>
+          <div class="inline-flex rounded-full border border-borde p-0.5 text-sm" role="group" aria-label="Ordenar por">
+            <button type="button" id="top-monto" @click="cambiarTop('monto')" class="rounded-full px-3 py-1 font-medium" :class="modoTop === 'monto' ? 'bg-primario text-white' : 'text-gray-600'" :aria-pressed="modoTop === 'monto'">Por monto</button>
+            <button type="button" id="top-cantidad" @click="cambiarTop('cantidad')" class="rounded-full px-3 py-1 font-medium" :class="modoTop === 'cantidad' ? 'bg-primario text-white' : 'text-gray-600'" :aria-pressed="modoTop === 'cantidad'">Por cantidad</button>
+          </div>
+        </div>
+        <div class="relative mt-3 h-72"><canvas id="grafico-top" role="img" aria-label="Barras horizontales con los 10 productos más vendidos"></canvas></div>
+      </section>
+
+      <section class="rounded-lg border border-borde bg-white p-4 sm:p-5" aria-labelledby="t-cat">
+        <h2 id="t-cat" class="font-titulo text-xl font-semibold">Las 5 categorías con más ventas</h2>
+        <div class="relative mt-3 h-72"><canvas id="grafico-categorias" role="img" aria-label="Gráfico de anillo con las 5 categorías con más ventas por monto"></canvas></div>
+      </section>
+
+      <section class="rounded-lg border border-borde bg-white p-4 sm:p-5" aria-labelledby="t-fiscal">
+        <h2 id="t-fiscal" class="font-titulo text-xl font-semibold">Fiscal e interno</h2>
+        <div class="relative mt-3 h-64"><canvas id="grafico-fiscal" role="img" aria-label="Gráfico de anillo con la distribución de facturas fiscales e internas"></canvas></div>
+      </section>
+
+      <section class="rounded-lg border border-borde bg-white p-4 sm:p-5" aria-labelledby="t-vend">
+        <h2 id="t-vend" class="font-titulo text-xl font-semibold">Ventas por vendedor</h2>
+        <div class="relative mt-3 h-64"><canvas id="grafico-vendedores" role="img" aria-label="Barras con el monto vendido por cada vendedor"></canvas></div>
+      </section>
+    </div>
+
+    <section class="mt-4 rounded-lg border border-borde bg-white p-4 sm:p-5" aria-labelledby="t-dia">
+      <h2 id="t-dia" class="font-titulo text-xl font-semibold">Ventas por día de la semana</h2>
+      <div class="relative mt-3 h-56"><canvas id="grafico-dias" role="img" aria-label="Barras con las ventas de cada día de la semana"></canvas></div>
+    </section>
+
+    <p class="mt-4 text-sm text-amber-700" x-show="sinGraficos" x-cloak role="status">No se pudo cargar la librería de gráficos. Los indicadores y las tablas siguen disponibles.</p>
+
+    <!-- Ranking de vendedores -->
+    <section class="mt-4 rounded-lg border border-borde bg-white p-4 sm:p-5" aria-labelledby="t-rank" id="ranking">
+      <h2 id="t-rank" class="font-titulo text-xl font-semibold">Ranking de vendedores</h2>
+      <p class="text-sm text-gray-500">Todo el equipo en el período, sin importar el filtro de vendedor.</p>
+      <div class="mt-3 overflow-x-auto">
+        <table class="w-full min-w-[640px] text-left text-sm">
+          <thead class="bg-fondo text-xs uppercase tracking-wide text-gray-500">
+            <tr>
+              <th scope="col" class="px-3 py-2 font-medium">Vendedor</th><th scope="col" class="px-3 py-2 font-medium">Rol</th>
+              <th scope="col" class="px-3 py-2 text-right font-medium"># Facturas</th><th scope="col" class="px-3 py-2 text-right font-medium">Monto vendido</th>
+              <th scope="col" class="px-3 py-2 text-right font-medium">Ticket promedio</th><th scope="col" class="px-3 py-2 text-right font-medium">% del total</th>
+              <th scope="col" class="px-3 py-2 text-right font-medium">Última venta</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-borde">
+            <template x-for="(v, i) in (r ? r.rankingVendedores : [])" :key="String(v.usuarioId) + '-' + i">
+              <tr :data-vendedor="v.usuarioId">
+                <td class="px-3 py-2.5 font-medium"><span x-text="i + 1 + '. ' + v.nombre"></span> <span x-show="!v.activo && v.usuarioId !== null" class="ml-1 text-xs font-normal text-gray-400">(inactivo)</span></td>
+                <td class="px-3 py-2.5"><span class="insignia ins-neutra" x-text="v.rol || '—'"></span></td>
+                <td class="px-3 py-2.5 text-right tabular-nums" x-text="v.facturas"></td>
+                <td class="px-3 py-2.5 text-right font-medium tabular-nums" x-text="dinero(v.monto)"></td>
+                <td class="px-3 py-2.5 text-right tabular-nums" x-text="dinero(v.ticketPromedio)"></td>
+                <td class="px-3 py-2.5 text-right tabular-nums" x-text="v.porcentaje + '%'"></td>
+                <td class="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-gray-600" x-text="v.ultimaVentaTexto"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="/js/iconos.js"></script>
+<script src="/js/estadisticas.js"></script>
