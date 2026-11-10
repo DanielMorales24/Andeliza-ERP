@@ -100,7 +100,7 @@ Estado: ✔ construida · ⬜ pendiente.
 |---|---|:---:|:---:|:---:|:---:|
 | Ver la situación del dinero | **HU-22** Panel con caja y bancos, por cobrar, por pagar, utilidad del mes y gráfico de seis meses | ✔ | — | 2 | ✔ |
 | Sacar los reportes | **HU-23** Estado de resultados, flujo de caja, balance general y antigüedad de saldos en PDF | ✔ | — | 2 | ✔ |
-| Ver qué se vende más | **HU-27** Estadísticas de ventas | ✔ | — | 3 | ⬜ |
+| Ver qué se vende más | **HU-27** Estadísticas de ventas | ✔ | — | 3 | ✔ |
 | Enterarme sin entrar al sistema | **HU-30** Avisos automáticos por WhatsApp o correo de stock bajo y facturas vencidas *(idea por validar)* | ✔ | — | 3 | ⬜ |
 | Preguntarle al sistema | **HU-32** Asistente virtual con IA: "¿cuánto vendí hoy?", "¿qué producto me falta?" *(idea por validar)* | ✔ | ✔ | 3 | ⬜ |
 

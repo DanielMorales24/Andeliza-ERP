@@ -26,6 +26,7 @@ Una pyme hondureña puede tener un sistema contable y de ventas profesional sin 
 - **Acceso inmediato.** No hay programas que instalar ni actualizar: cada mejora llega a todos los usuarios al mismo tiempo.
 - **Doble modo de facturación.** Con un CAI configurado, cada factura usa el siguiente número del rango autorizado y el sistema se bloquea a propósito si el CAI venció o se agotó. Sin CAI, el negocio emite comprobantes internos numerados (INT-000001) para llevar un orden desde el primer día. Cuando el negocio se registra, basta con cargar el CAI (por ahora con un script SQL y, desde la Fase 7, desde la interfaz).
 - **Roles y permisos granulares.** Cuatro roles de fábrica (administrador, supervisor, vendedor y contador) y los que el administrador cree, con una matriz de permisos por módulo y acción. El servidor bloquea cada ruta (403), el vendedor solo ve sus propias facturas y todo queda en una auditoría que no se puede alterar. Ver [docs/permisos.md](docs/permisos.md).
+- **Estadísticas para decidir.** Una pantalla con indicadores comparados contra el período anterior, seis gráficos, insights redactados con datos reales (qué se vende, cuándo, quién y con qué margen) y un ranking de vendedores, con reporte en PDF. Ver [docs/referencia-tecnica.md](docs/referencia-tecnica.md).
 - **Ventas, inventario y finanzas conectados.** Una venta descuenta el stock, genera su asiento contable y, si queda a crédito, aparece sola en cuentas por cobrar con su vencimiento.
 - **Contabilidad que el usuario no tiene que hacer.** Cada venta, compra, gasto, cobro y pago genera su partida doble. El dueño ve caja y bancos, lo que le deben, lo que debe y su utilidad del mes, y descarga el estado de resultados, el flujo de caja, el balance general y la antigüedad de saldos en PDF.
 - **Hecho para quien no es técnico.** Formularios guiados, validaciones con mensajes claros y una interfaz que se adapta al celular.
@@ -40,7 +41,7 @@ Una pyme hondureña puede tener un sistema contable y de ventas profesional sin 
 | 3 | Punto de venta, facturación (CAI o interna), PDF, cotizaciones e historial de facturas | Hecha |
 | 4 | Finanzas: partida doble, cuentas por cobrar y por pagar, ingresos, gastos, compras, libro diario y reportes en PDF | Hecha |
 | 5 | Inventario visual y alertas de stock | Absorbida por la Fase 2 (la lista de reposición pasa a la Fase 8) |
-| 6 | Estadísticas de ventas | Pendiente (pospuesta a propósito: se apoya en los roles de la Fase 7) |
+| 6 | Estadísticas de ventas: indicadores, seis gráficos, insights automáticos, ranking de vendedores y reporte en PDF. Incluye el panel de inicio rediseñado y el menú de perfil | Hecha (se construyó después de la 7 para poder medir por vendedor y por rol) |
 | 7 | Configuración, usuarios y roles con permisos granulares, contraseñas con bcrypt, bloqueo por intentos y auditoría | Hecha (se construyó antes que la 6, falta CSRF) |
 | 8 | Avisos automáticos por WhatsApp o correo, asistente virtual con IA y método de pago en el punto de venta | Pendiente (ideas por validar) |
 
@@ -131,7 +132,7 @@ andeliza-erp/
 │   ├── referencia-tecnica.md  Pantallas, endpoints y reglas de negocio
 │   └── bitacora/              Una bitácora por semana
 ├── db/
-│   ├── migrations/            01 a 05: de la Fase 1 a la Fase 7
+│   ├── migrations/            01 a 06: de la Fase 1 a la Fase 6 (la 05 es la Fase 7)
 │   ├── functions.sql          Funciones y triggers (se puede repetir)
 │   ├── seed.sql               Datos de ejemplo
 │   └── README.md              Orden de ejecución
@@ -141,10 +142,12 @@ andeliza-erp/
 ├── app.js                     Aplicación Express
 ├── client.config.js           Personalización por cliente
 ├── controllers/  models/  routes/  services/  middlewares/  utils/
-├── views/                     Plantillas EJS
+├── views/                     Plantillas EJS (una carpeta por módulo, incluidas estadisticas/ y perfil/)
 ├── public/                    CSS y JavaScript del navegador
 └── vercel.json
 ```
+
+Pantallas principales: `/` (panel de inicio), `/pos`, `/facturas`, `/inventario`, `/finanzas`, **`/estadisticas`**, `/configuracion` y, para cualquier persona con sesión, **`/perfil`** y **`/perfil/actividad`**.
 
 ## Documentación
 

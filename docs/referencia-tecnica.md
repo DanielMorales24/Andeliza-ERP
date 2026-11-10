@@ -17,7 +17,7 @@ Stack: Node.js 20 + Express, EJS, PostgreSQL (Supabase), Tailwind y Alpine.js po
 | 3 | POS y facturación (PDF, cotización, historial) | Hecha |
 | 4 | Finanzas y contabilidad: partida doble, cuentas por cobrar y por pagar, reportes en PDF | Hecha |
 | 5 | Inventario visual y alertas de stock | Absorbida por la Fase 2 |
-| 6 | Estadísticas | Pendiente |
+| 6 | Estadísticas de ventas, panel de inicio rediseñado y menú de perfil | Hecha |
 | 7 | Configuración, usuarios y roles con permisos (hecha antes que la 6, por decisión de arquitectura D-01) | Hecha |
 | 8 | Avisos automáticos, asistente virtual con IA y método de pago | Pendiente (ideas por validar) |
 
@@ -48,9 +48,14 @@ models/contabilidad.js, cartera.js, movimientos.js   Libro, reportes, CxC/CxP e 
 utils/totales.js       Cálculo de subtotal, impuesto y total en centavos (igual que Postgres)
 services/storageService.js  Subida y borrado de imágenes en Supabase Storage (solo servidor)
 public/js/             ui.js (utilidades), entidades.js, inventario.js, producto-form.js, pos.js, facturas.js, finanzas-*.js (Alpine)
-routes/modulos.js      Páginas "próximamente" de los módulos que aún no existen
+routes/modulos.js      Páginas "próximamente" de los módulos que aún no existen (hoy todos existen: queda como red de seguridad)
+models/estadisticas.js  Filtros, períodos, respuesta JSON e insights de /estadisticas (llama a las funciones SQL de la migración 06)
+models/perfil.js, controllers/perfil.js   /perfil y /perfil/actividad
+models/dashboard.js     Panel de inicio: ventas del día, cobranza, stock, facturación, alertas, top de productos y últimas ventas
+public/js/iconos.js     Íconos de línea compartidos por el servidor (EJS) y el navegador (Alpine)
+public/js/estadisticas.js, dashboard.js   Filtros y gráficos de Chart.js
 views/                 EJS: layouts, partials y una carpeta por módulo
-db/                    migrations/ (01 a 05), functions.sql, seed.sql y README.md
+db/                    migrations/ (01 a 06), functions.sql, seed.sql y README.md
 ```
 
 ## Facturación: modo SAR o modo interno
@@ -152,6 +157,100 @@ Todo `/configuracion` exige permisos de `configuracion`, que son solo del rol `a
 | `GET /configuracion/auditoria`, `.../datos` | `configuracion.ver` | Últimos 50 movimientos |
 | `GET`/`POST /cambiar-contrasena` | Con sesión | Cambio de la propia contraseña (obligatorio si es provisional) |
 | `GET`/`POST /recuperar` | Pública | Usar el código de recuperación para elegir una contraseña nueva |
+
+## Panel de inicio (`/`)
+
+| Método y ruta | Quién | Qué hace |
+|---|---|---|
+| `GET /` | `dashboard.ver` | Panel de inicio. Quien no lo tiene (vendedor, contador) es enviado a su módulo principal: el vendedor al POS y el contador a Finanzas |
+
+Cada bloque aparece solo si la persona puede verlo (permiso y funcionalidad activa en `client.config.js`) y solo si hay algo que mostrar:
+
+1. **Bienvenida:** saludo según la hora del negocio, la fecha en español y una línea con lo de hoy ("L X en N ventas · M facturas pendientes de cobro").
+2. **Alertas del sistema** (la sección se oculta si no hay ninguna):
+   - **CAI:** *urgente* si está vencido, agotado, quedan 5 números o menos, o vence en 7 días o menos. *Aviso* si vence en 30 días o menos. El enlace a Configuración solo aparece para quien puede abrirla.
+   - **Contabilidad sin iniciar** (solo con `finanzas.ver`).
+   - **Conciliación de inventario pendiente**: el inventario físico difiere del libro contable en L 1.00 o más (solo con la contabilidad iniciada y `finanzas.ver`).
+3. **Cuatro tarjetas del día:** ventas de hoy contra ayer (▲/▼ con %), cuentas por cobrar con lo vencido (solo `finanzas.ver`), stock bajo y el estado de la facturación (con CAI: cuántos números quedan y cuándo vence. Interna: el siguiente comprobante).
+4. **Gráfico de las ventas de los últimos 30 días** (línea con área; Chart.js).
+5. **Accesos rápidos con contexto:** Cobrar venta (con el stock bajo), Ver inventario (con el conteo de productos), Gestionar cartera (con lo que hay por cobrar) y Ver estadísticas (con las ventas del mes).
+6. **Los 5 productos del mes** con su imagen (o sus iniciales) y las unidades vendidas.
+7. **Últimas 5 ventas**, solo con `facturas.ver` (todas) o `facturas.ver_propias` (únicamente las de la persona, y lo dice).
+
+El panel reutiliza las funciones de estadísticas (`estadisticas_kpis`, `estadisticas_serie`, `estadisticas_top_productos`) y la vista `v_cxc`, y usa la zona horaria del negocio guardada en la base (`hoy_negocio()`).
+
+## Estadísticas (Fase 6)
+
+Pantalla gerencial para entender qué se vendió, cuándo, quién y con qué margen, sin exportar nada a Excel. Exige `estadisticas.ver` (administrador y supervisor de fábrica) y responde 404 si `funcionalidades.estadisticas` está en `false`.
+
+| Método y ruta | Qué hace |
+|---|---|
+| `GET /estadisticas` | La pantalla. Los filtros consultan el JSON sin recargar la página |
+| `GET /estadisticas/datos` | JSON con todo lo que se dibuja. Parámetros: `periodo`, `desde`, `hasta`, `vendedor`, `categoria` |
+| `GET /estadisticas/reporte.pdf` | PDF del período con los mismos parámetros. `descargar=1` lo baja como adjunto. Cada exportación queda en la auditoría |
+
+**Filtros.** `periodo` es un atajo y vale uno de: `hoy`, `ayer`, `semana` (desde el lunes), `mes`, `mes_pasado`, `30d`, `anio` y `todo` (por defecto `mes`). Si llegan `desde` o `hasta`, mandan ellas (rango personalizado). `vendedor` y `categoria` son ids. Una fecha final futura se recorta al día de hoy, y las fechas inválidas, invertidas o anteriores al año 2000 responden 422 con un mensaje en español.
+
+**Indicadores** (cada uno se compara con el *período anterior de igual longitud*, pegado al actual. "Todo" no compara):
+
+| Indicador | Cómo se calcula |
+|---|---|
+| Ventas totales | Suma de las ventas del período, cobradas o a crédito, **con impuesto** (igual que Facturas) |
+| Facturas emitidas | Ventas distintas en el período |
+| Ticket promedio | Ventas totales entre facturas |
+| Margen bruto (L y %) | (precio − `costo_unitario` guardado en la venta) × cantidad, **sin impuesto**. El % es sobre las ventas sin impuesto. Si hay ventas sin costo registrado, la tarjeta lo avisa |
+| Productos distintos vendidos | Productos diferentes con al menos una venta |
+| Fiscales vs internas | Porcentaje de facturas de cada tipo |
+
+**Gráficos** (Chart.js, con etiquetas y tooltips con "L" y separador de miles):
+
+| Gráfico | Contenido |
+|---|---|
+| Ventas en el tiempo | Línea por día. Barras por semana o por mes. La agrupación es automática: hasta 62 días por día, hasta 270 por semana y más por mes. Los períodos sin ventas salen en cero |
+| Productos más vendidos | Barras horizontales de los 10 principales, con un interruptor *Por monto* / *Por cantidad* |
+| Categorías | Anillo con las 5 principales por monto y "Otras" con el resto |
+| Fiscal vs interno | Anillo de dos partes (facturas, porcentaje y monto en el tooltip) |
+| Ventas por vendedor | Barras horizontales con el monto, y en el tooltip # de facturas y % del total |
+| Ventas por día de la semana | Barras de lunes a domingo, con el promedio por día en el tooltip |
+
+**Insights automáticos.** Frases redactadas con los valores reales del período. Solo aparecen cuando hay datos para sostenerlas: variación contra el período anterior, mejor día, producto más vendido, vendedor líder, producto con mejor margen, cuentas por cobrar vencidas (solo con `finanzas.ver`), cambio del ticket promedio, porcentaje vendido a crédito, día de la semana más fuerte (con 14 días o más) y un aviso cuando el costo no está completo.
+
+**Ranking de vendedores.** Tabla con vendedor, rol (leído de `roles`), # de facturas, monto, ticket promedio, % del total y última venta, ordenada por monto. **No aplica el filtro de vendedor**: muestra a todo el equipo para que el porcentaje tenga sentido. Es la tabla que solo es posible porque `ventas.usuario_id` existe y cada usuario tiene `rol_id` (decisión D-01).
+
+**Reporte en PDF.** Logo y datos del negocio, período, filtros y comparación, indicadores, lo más importante, los gráficos y el ranking. Los gráficos se **dibujan en el servidor con pdfkit** a partir de los mismos datos de la pantalla: así el reporte sale de una simple dirección (un `GET` no puede cargar imágenes) y no depende del navegador. Sin ventas en el período, el PDF lo dice con un mensaje.
+
+**Respuesta de `/estadisticas/datos`.** `{ ok, vacio, rango, filtros, kpis, serie, topProductos, topCategorias, rankingVendedores, fiscalVsInterno, porDiaSemana, insights }`. Cuando `vacio` es `true` la pantalla muestra un mensaje amable en lugar de los gráficos.
+
+**Funciones SQL** (`db/migrations/06_migracion_fase6.sql`, todas de solo lectura y `STABLE`):
+
+| Función | Para qué |
+|---|---|
+| `zona_negocio()` | Zona horaria del negocio |
+| `estadisticas_lineas(desde, hasta, vendedor, categoria)` | Una fila por línea de venta del período con su neto, bruto (con impuesto repartido), costo y si tiene costo |
+| `estadisticas_kpis(...)` | Los indicadores del período |
+| `estadisticas_serie(..., agrupar)` | Ventas por día, semana o mes, con ceros |
+| `estadisticas_top_productos(..., limite)` | Principales por cantidad y por monto, y el de mejor margen |
+| `estadisticas_top_categorias(..., limite)` | Principales categorías y "otras" |
+| `estadisticas_vendedores(desde, hasta, categoria)` | Ranking de vendedores (une `usuarios` y `roles`) |
+| `estadisticas_dia_semana(...)`, `estadisticas_mejor_dia(...)` | Ventas por día de la semana y el mejor día |
+| `estadisticas_panel(...)` | Todo lo anterior, más el período anterior, en una sola llamada |
+
+El período se mide por el **día local del negocio**: una venta de las 23:59 pertenece a su día aunque en UTC ya sea el siguiente. La migración agrega el índice `idx_ventas_usuario` (los otros tres que pedía la fase ya existían desde la Fase 1) y no cambia ninguna tabla ni función existente.
+
+**Límites.** El permiso `estadisticas.ver` muestra a todo el equipo (no hay un "solo mis ventas" para esta pantalla). Las ventas anteriores a que se registrara el costo de cada producto tienen `costo_unitario` en cero: por eso el margen avisa cuánto de lo vendido tiene costo.
+
+## Perfil y menú de usuario
+
+| Método y ruta | Quién | Qué hace |
+|---|---|---|
+| `GET /perfil` | Cualquier usuario con sesión | Datos de la persona (nombre, usuario, rol, último acceso, acceso anterior, cuenta creada y contraseña cambiada), su matriz de permisos y los módulos que puede abrir |
+| `GET /perfil/actividad` | Cualquier usuario con sesión | Sus últimos 20 movimientos (`auditoria` con `usuario_id` = el de la sesión): fecha y hora, acción, entidad, descripción e IP |
+
+- **Matriz "Tus permisos".** Se lee de `roles_permisos` en cada visita (no está escrita en el código), agrupada por módulo, con ✔ para lo que el rol tiene y — para lo que no. Las acciones que un módulo no ofrece salen en blanco. El administrador tiene todo por definición.
+- **Regla de propiedad.** Estas rutas nunca reciben un id de usuario: usan el de la sesión. Los intentos fallidos de inicio de sesión sobre la cuenta aparecen resaltados, para que la persona note si alguien probó su contraseña.
+- **Último acceso.** Es el inicio de la sesión actual (el inicio de sesión lo registra al entrar). En *Mi perfil* también se muestra el **acceso anterior**, tomado de la auditoría.
+- **Menú del encabezado.** Un círculo con la inicial del nombre y un ícono según el rol (administrador: escudo. Supervisor: insignia. Vendedor: bolsa. Contador: calculadora. Los roles creados por el administrador: persona). Al abrirlo muestra nombre, usuario, rol y último acceso, y las opciones *Mi Perfil*, *Cambiar contraseña*, *Mi actividad*, *Ir a Configuración* (solo administrador) y *Cerrar sesión* (en rojo, un `POST /logout`). Se cierra con la tecla ESC o con un clic fuera. En el celular (menos de 640 px) se muestra como una hoja inferior.
+- **Sidebar.** En la parte de abajo, fijos y con un separador, *Cambiar contraseña* y *Salir*. Llevan el atributo `title` como ayuda al pasar el cursor (el menú lateral no tiene un modo contraído).
 
 ## Configuración opcional (`client.config.js` > `valoresPorDefecto`)
 

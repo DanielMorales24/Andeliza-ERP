@@ -31,7 +31,7 @@ El piso de app completa es el conjunto mínimo de capacidades que hace que la ap
 | **3** | **Modelo de datos y punto de venta.** Ordenar el modelo y poder cobrar con factura. | `modelo-datos.md`, migraciones numeradas, `seed.sql`, bitácora 3. Punto de venta, facturación con CAI e interna, PDF, cotización e historial. | HU-10, HU-11, HU-13, HU-14, HU-15 | ✔ |
 | **4** | **Finanzas y contabilidad. Se alcanza el piso de app completa.** El dueño ve su situación real. | Partida doble, cuentas por cobrar y por pagar, ingresos, gastos y compras, libro diario, panel financiero y cuatro reportes en PDF. | HU-16 a HU-25 | ✔ |
 | **5** | **Inventario visual y alertas.** Saber qué reponer. | *Absorbida por la Fase 2 (decisión D-02).* El listado ya muestra la foto de cada producto, su estado de stock y filtros con conteo, y el panel muestra los artículos por reponer. La lista de reposición pasa a la Fase 8 y las pruebas de aceptación contra los criterios Gherkin, a la semana 9. | HU-26 | ◐ *(resuelta en la Fase 2)* |
-| **6** | **Estadísticas.** Entender qué se vende más y cuándo. | Fase 6: ventas por período y los productos y categorías más vendidos. | HU-27 | ⬜ *(pospuesta, ver D-01)* |
+| **6** | **Estadísticas.** Entender qué se vende más y cuándo. | *Construida en la semana 5.* Indicadores comparados con el período anterior, seis gráficos, insights automáticos, ranking de vendedores y reporte en PDF. En la misma semana se rediseñó el panel de inicio y se agregó el menú de perfil. | HU-27 | ✔ |
 | **7** | **Configuración y seguridad.** Que el negocio se administre solo y que las cuentas estén protegidas. | Fase 7: datos del negocio, CAI y usuarios desde la interfaz. Contraseñas con hash, protección CSRF y límite de intentos. Revisión del formato de factura con un contador. | HU-28, HU-29 | ◐ *(construida en la semana 4)* |
 | **8** | **Avisos automáticos y asistente con IA.** Que el sistema avise solo y responda preguntas. *(Ideas por validar con las pymes.)* | Fase 8: notificaciones automáticas por WhatsApp o correo (stock bajo con su lista de reposición y facturas vencidas), asistente virtual con IA para consultar ventas e inventario con preguntas en lenguaje natural, y método de pago en el punto de venta. | HU-30, HU-31, HU-32 | ⬜ |
 | **9** | **Piloto y calidad.** Probar con personas reales. | Uso real con el cliente 1 y con dos o tres pymes más. Medición de las hipótesis H1 y H2. Pruebas automatizadas dentro del repositorio. CSS de Tailwind compilado. Defectos críticos cerrados. | Todas | ⬜ |
@@ -49,6 +49,8 @@ El piso de app completa es el conjunto mínimo de capacidades que hace que la ap
 
 **Consecuencias.** Se eligió (b). Las ventas ya guardan `usuario_id`, y `usuarios.rol_id` y `roles` permiten agrupar por vendedor y por rol sin migraciones nuevas. A cambio, las estadísticas llegan más tarde: ya no es un tema de "pendiente por olvido" sino un orden elegido. También se adelantó el hash de contraseñas, que era la deuda de seguridad más importante.
 
+**Resultado (semana 5).** La decisión se comprobó: el ranking de vendedores de la Fase 6 se arma uniendo `ventas.usuario_id` con `usuarios` y `roles`, y no hizo falta ninguna migración de datos. Con el orden contrario habría que haber rehecho ese reporte.
+
 ### Decisión de arquitectura D-02: la Fase 5 no se construye como fase aparte
 
 **Decisión.** Se da por absorbida la Fase 5 (Inventario visual y alertas) y la semana 5 queda disponible.
@@ -57,7 +59,7 @@ El piso de app completa es el conjunto mínimo de capacidades que hace que la ap
 
 **Alternativas.** (a) Construir una vista visual y alertas nuevas, que repetirían lo que ya existe. (b) Dar la Fase 5 por cubierta y usar ese tiempo en lo que falta.
 
-**Consecuencias.** Se eligió (b). Dos de los tres escenarios de HU-26 quedan cubiertos desde la Fase 2. El tercero, la lista de reposición agrupada por proveedor, se une a los avisos automáticos de la Fase 8 (HU-30). Las pruebas de aceptación contra los criterios Gherkin pasan a la semana 9. La semana 5 se propone para las Estadísticas (Fase 6), que ya cuentan con quién vendió y con qué rol.
+**Consecuencias.** Se eligió (b). Dos de los tres escenarios de HU-26 quedan cubiertos desde la Fase 2. El tercero, la lista de reposición agrupada por proveedor, se une a los avisos automáticos de la Fase 8 (HU-30). Las pruebas de aceptación contra los criterios Gherkin pasan a la semana 9. La semana 5 se usó para las Estadísticas (Fase 6), que ya contaban con quién vendió y con qué rol.
 
 ### Decisión D-03: se descarta el acceso móvil por QR
 
@@ -70,7 +72,7 @@ El piso de app completa es el conjunto mínimo de capacidades que hace que la ap
 
 ### Avance frente al plan
 
-Al momento de esta versión del plan, las Fases 1 a 4 están construidas: el piso de app completa ya existe y se alcanzó al cierre de la semana 3. El tiempo que eso deja libre se reasigna a lo que más riesgo tiene para la calidad: la seguridad de las cuentas, las pruebas con usuarios reales y el pulido.
+Al momento de esta versión del plan, las Fases 1 a 4 están construidas (y desde entonces también la Fase 7, en la semana 4, y la Fase 6, en la semana 5, con la Fase 5 absorbida por la Fase 2): el piso de app completa ya existe y se alcanzó al cierre de la semana 3. El tiempo que eso deja libre se reasigna a lo que más riesgo tiene para la calidad: la seguridad de las cuentas, las pruebas con usuarios reales y el pulido.
 
 ## 3. Metodología de trabajo
 

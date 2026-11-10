@@ -814,7 +814,7 @@ Característica: Inventario visual y alertas
 
 ## HU-27 · Ver estadísticas de ventas
 
-**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `rol-admin` · **Estado:** pendiente (Fase 6)
+**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `rol-admin` · **Estado:** construida (Fase 6)
 
 **Historia:** Como administrador, quiero ver qué y cuándo se vende más, para decidir mejor mis compras y mis promociones.
 

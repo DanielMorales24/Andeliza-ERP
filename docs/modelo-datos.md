@@ -2,7 +2,7 @@
 
 Modelo relacional de Andeliza ERP en PostgreSQL (Supabase). Cubre las Fases 1 a 4: acceso y configuración, catálogo e inventario, clientes y proveedores, ventas y facturación, compras, cartera y contabilidad por partida doble.
 
-> Este documento se generó leyendo el catálogo de una base real creada con `db/migrations/01` a `05`, `db/functions.sql` y `db/seed.sql`, así que coincide con los scripts. La base tiene **26 tablas**, **2 vistas**, **237 columnas** y **37 claves foráneas**.
+> Este documento se generó leyendo el catálogo de una base real creada con `db/migrations/01` a `05`, `db/functions.sql` y `db/seed.sql`, y a la que luego se le aplicó la migración `06` (solo agrega un índice y las 10 funciones de estadísticas, de solo lectura, sin cambiar ninguna tabla: por eso los totales de abajo no cambian), así que coincide con los scripts. La base tiene **26 tablas**, **2 vistas**, **237 columnas** y **37 claves foráneas**.
 
 ## Decisiones de modelado
 
@@ -781,6 +781,15 @@ Las reglas críticas viven en la base de datos para que cada operación sea ató
 | `cuenta_efectivo` | Valida que la cuenta sea Caja o Bancos. |
 | `cuenta_por_clave` | Id de una cuenta contable a partir de su clave estable. |
 | `eliminar_rol` | Elimina un rol propio que no tenga usuarios. |
+| `estadisticas_dia_semana` | Ventas por día de la semana (1 lunes a 7 domingo) con el promedio por día. |
+| `estadisticas_kpis` | Indicadores del período: ventas, facturas, ticket, margen, productos distintos, fiscal e interno, crédito. |
+| `estadisticas_lineas` | Una fila por línea de venta del período con su neto, bruto (impuesto repartido), costo y si tiene costo. Es la base de las demás funciones de estadísticas. |
+| `estadisticas_mejor_dia` | El día con más ventas del período. |
+| `estadisticas_panel` | Todo lo de estadísticas y el período anterior de igual longitud, en una sola llamada. |
+| `estadisticas_serie` | Ventas por día, semana o mes (automático según el rango), con ceros en los períodos sin ventas. |
+| `estadisticas_top_categorias` | Categorías con más ventas: las primeras N y el resto agrupado en "otras". |
+| `estadisticas_top_productos` | Productos más vendidos por cantidad y por monto, y el de mejor margen. |
+| `estadisticas_vendedores` | Ranking de vendedores con su rol (une `usuarios` y `roles`). No aplica el filtro de vendedor. |
 | `fecha_local` | Convierte un instante a la fecha del negocio (zona horaria configurada). |
 | `generar_apertura_contable` | Inicia la contabilidad con inventario y ventas pendientes contra capital. |
 | `generar_codigo_recuperacion` | El administrador genera un código temporal de un solo uso (se guarda su hash). |
@@ -804,6 +813,7 @@ Las reglas críticas viven en la base de datos para que cada operación sea ató
 | `validar_permiso_rol` | Trigger: Configuración es solo del rol admin. |
 | `valor_inventario` | Valor de las existencias a costo. |
 | `verificar_partida_balanceada` | Trigger diferido: una partida solo se confirma si Debe = Haber. |
+| `zona_negocio` | Zona horaria del negocio (la misma que usa `fecha_local`). |
 
 ## Reglas de integridad que impone la base
 

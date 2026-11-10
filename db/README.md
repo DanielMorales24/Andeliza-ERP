@@ -11,22 +11,35 @@ Scripts de PostgreSQL (Supabase) de Andeliza ERP. Todo está en español, en `sn
 | 3 | `migrations/03_migracion_fase3.sql` | POS: `clave_cliente` para que un cobro repetido no duplique la venta, e índices | Sí |
 | 4 | `migrations/04_migracion_fase4.sql` | Contabilidad por partida doble, abonos, pagos y las vistas `v_cxc` y `v_cxp` | Sí |
 | 5 | `migrations/05_migracion_fase7.sql` | Roles, permisos y roles_permisos, `usuarios.rol_id`, contraseñas con bcrypt, bloqueo por intentos, versión de sesión y cambio obligatorio, recuperación de contraseña y auditoría ampliada y de solo agregar | Sí (no borra usuarios ni pisa permisos ajustados) |
-| 6 | `functions.sql` | Funciones y triggers (venta, numeración, partida doble, cobros, pagos, login, usuarios, roles y permisos) | Sí: todo es `CREATE OR REPLACE` |
-| 7 | `seed.sql` | Datos de ejemplo de una tienda deportiva, con contabilidad y ventas | Solo una vez, y solo en desarrollo |
+| 6 | `migrations/06_migracion_fase6.sql` | Estadísticas: el índice `idx_ventas_usuario` y 10 funciones de solo lectura (`estadisticas_*`, `zona_negocio`). No crea tablas ni toca datos ni funciones existentes | Sí. Ya trae `BEGIN` y `COMMIT` |
+| 7 | `functions.sql` | Funciones y triggers (venta, numeración, partida doble, cobros, pagos, login, usuarios, roles y permisos) | Sí: todo es `CREATE OR REPLACE` |
+| 8 | `seed.sql` | Datos de ejemplo de una tienda deportiva, con contabilidad y ventas | Solo una vez, y solo en desarrollo |
 
 Después de la cadena la base tiene **26 tablas y 2 vistas**.
 
 ## Base nueva
 
-Ejecuta los siete archivos en ese orden (el último es opcional). Las migraciones 02 a 05 son seguras sobre una base nueva porque solo agregan lo que falta.
+Ejecuta los ocho archivos en ese orden (el último es opcional). Las migraciones 02 a 06 son seguras sobre una base nueva porque solo agregan lo que falta.
 
 ## Base que ya está en una fase anterior
 
-Ejecuta solo las migraciones que falten y luego `functions.sql` completo. Ejemplo: una base de la Fase 3 corre `04_migracion_fase4.sql`, la `05_migracion_fase7.sql` y después `functions.sql`.
+Ejecuta solo las migraciones que falten y luego `functions.sql` completo (si la base ya está en la Fase 7 y solo falta la Fase 6, basta la `06_migracion_fase6.sql`: no cambia `functions.sql`). Ejemplo: una base de la Fase 3 corre `04_migracion_fase4.sql`, la `05_migracion_fase7.sql` y después `functions.sql`.
 
 **El orden entre el SQL y el código depende de la migración.** Las de las Fases 2 a 4 solo agregan tablas y columnas, y el código anterior sigue funcionando con ellas: ahí va primero el SQL y después el código. **La 05 (Fase 7) es la excepción**, porque cambia las contraseñas a bcrypt y quita `usuarios.rol`, y el código anterior deja de funcionar. Para esa sigue la sección *Puesta en producción de la Fase 7*, más abajo: primero el código y al final el SQL.
 
 Al correr `functions.sql` en una base que ya tiene datos, la contabilidad se inicia sola con el estado de ese día: inventario y ventas pendientes contra capital. Caja y Bancos arrancan en cero y se cargan desde *Finanzas > Saldo inicial*.
+
+## Puesta en producción de la Fase 6 (base que ya está en la Fase 7)
+
+La `06_migracion_fase6.sql` **solo agrega**: un índice (`idx_ventas_usuario`) y 10 funciones de lectura. No crea tablas, no cambia columnas, no toca datos y no modifica ninguna función existente. Por eso sigue la regla general de arriba: **primero el SQL y después el código** (al revés que la 05).
+
+1. **Ejecuta la migración.** En Supabase, *SQL Editor*, pega `db/migrations/06_migracion_fase6.sql` y ejecútala. Ya trae `BEGIN` y `COMMIT`, así que se aplica completa o no se aplica. El código que está en producción hoy no la nota.
+2. **Haz `git push`.** Vercel construye y publica el código nuevo, que ya encuentra las funciones.
+3. **Verifica.** `/salud` responde `ok`. Entra como administrador: el inicio muestra el panel nuevo, *Estadísticas* abre con datos y *Exportar PDF* descarga el reporte. El vendedor sigue entrando directo al punto de venta.
+
+- **Si la migración falla**, no queda nada a medias (se probó con un error forzado antes del `COMMIT`). Corrige la causa y vuelve a ejecutarla: el código anterior sigue funcionando.
+- **Si el despliegue del código falla**, *Instant Rollback* en Vercel es seguro, porque la migración es aditiva.
+- **Si se hizo al revés** (código primero), el inicio del administrador y del supervisor y los datos de *Estadísticas* dan error hasta que se ejecute la migración (la pantalla abre, pero muestra un mensaje de error). El vendedor, el contador y las demás pantallas no se afectan. No se pierde nada: basta ejecutarla.
 
 ## Puesta en producción de la Fase 7 (base que ya está en la Fase 4)
 

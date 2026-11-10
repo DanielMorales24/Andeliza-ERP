@@ -90,12 +90,13 @@ Interpretación de cada rol:
 | `POST` de iniciar, saldo inicial, ingresos, gastos, compras, abonos, pagos, asientos manuales | `finanzas.crear` |
 | `POST /finanzas/conciliar-inventario` | `finanzas.editar` |
 | `POST` de anular ingresos, gastos, abonos, pagos y asientos | `finanzas.eliminar` |
-| `GET /estadisticas` | `estadisticas.ver` |
+| `GET /estadisticas`, `GET /estadisticas/datos`, `GET /estadisticas/reporte.pdf` | `estadisticas.ver` |
 | `GET /configuracion/*` | `configuracion.ver` |
 | `POST /configuracion/usuarios`, `POST /configuracion/roles` | `configuracion.crear` |
 | `PUT`/`PATCH` de negocio, facturación, usuarios, roles y permisos, y generar código de recuperación | `configuracion.editar` |
 | `DELETE /configuracion/roles/:id` | `configuracion.eliminar` |
 | `/login`, `/logout`, `/recuperar` | Públicas (la recuperación exige el código del administrador) |
+| `GET /perfil`, `GET /perfil/actividad` | Cualquier usuario con sesión, sin permiso de módulo (es la información de la propia persona) |
 | `/cambiar-contrasena` | Cualquier usuario con sesión, y es la única ruta (además de salir) que se permite con una contraseña provisional |
 
 ## Reglas de propiedad del dato
@@ -107,6 +108,8 @@ Además de "qué módulos puedo usar", hay reglas sobre **de quién son los dato
 | **El vendedor solo ve e imprime las facturas que él mismo emitió.** | Con `facturas.ver_propias` y sin `facturas.ver`, la consulta del listado agrega `WHERE usuario_id = <él>` (el filtro está en la consulta SQL y no en la pantalla, y los totales también salen solo de sus ventas). El PDF de una venta ajena responde **404**, para no confirmar que existe. |
 | **El contador, el supervisor y el admin ven todas las facturas.** | Tienen `facturas.ver`. |
 | **Quien solo cobra imprime su propia factura.** | El PDF también se permite con `pos.crear`, pero solo las propias. Sin `facturas.ver_propias` no entra al listado. |
+| **Mi actividad (`/perfil/actividad`) solo muestra lo que la propia persona hizo.** | La consulta usa el id de la sesión (`WHERE usuario_id = <él>`) y no acepta un usuario por parámetro: pedir la actividad de otra persona devuelve siempre la propia. |
+| **Estadísticas es una vista gerencial.** | Quien tiene `estadisticas.ver` ve las cifras de todo el equipo, incluido el ranking de vendedores. El aviso de cuentas por cobrar vencidas solo se calcula si además tiene `finanzas.ver`. |
 | **Marcar una factura como pagada** | Solo con `facturas.editar` (admin y supervisor). El vendedor y el contador no. |
 
 ## Cuentas de demostración
@@ -144,6 +147,8 @@ Estas contraseñas cumplen la política (8 o más caracteres, con letras y núme
 4. Entra como `admin` / `admin123`, abre *Configuración → Auditoría* y verás el acceso denegado del vendedor con su nombre, la ruta y la IP.
 5. En *Configuración → Roles y permisos* quítale `Crear` en *Punto de venta* al rol `vendedor` y guarda. Sin cerrar su sesión, el vendedor ya no puede cobrar.
 6. En *Configuración → Usuarios* desactiva al vendedor: en su siguiente clic vuelve al inicio de sesión.
+7. Como `vendedor`, abre `/estadisticas`: responde **403**. Como `supervisor` o `admin`, la misma dirección muestra los indicadores, los gráficos y el ranking de vendedores.
+8. Abre *Mi Perfil* desde el menú de tu nombre: la matriz de *Tus permisos* es la de tu rol y coincide con la tabla de este documento. *Mi actividad* solo lista tus propios movimientos.
 
 ## Límites conocidos (deuda declarada)
 
@@ -153,3 +158,4 @@ Estas contraseñas cumplen la política (8 o más caracteres, con letras y núme
 - **La cookie de sesión dura 12 horas** y se firma con `SESSION_SECRET`. Si esa variable se filtra, hay que cambiarla (cierra todas las sesiones).
 - **Las pruebas se hicieron contra Postgres local con un Supabase simulado.** Falta repetir la comprobación en el despliegue real de Vercel y Supabase.
 - **Recuperación del único administrador.** El código de recuperación lo genera un administrador. Si el único admin olvida su contraseña, la recuperación se hace con el procedimiento SQL de emergencia documentado en `docs/referencia-tecnica.md`. Una fase futura podría añadir recuperación por correo con SMTP.
+- **Estadísticas no distingue "solo mis ventas".** El permiso `estadisticas.ver` da acceso a las cifras de todo el equipo. Un vendedor que solo debiera ver las suyas todavía no tiene un permiso equivalente a `facturas.ver_propias` para esta pantalla.
