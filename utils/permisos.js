@@ -46,6 +46,8 @@ function crearUsuarioSesion(f) {
     sesionVersion: f.sesion_version,
     ultimoAcceso: f.ultimo_acceso || null,
     creadoEn: f.creado_en || null,
+    // Le toca hacer el asistente inicial: lo tiene pendiente Y el negocio aún no fue configurado
+    debeOnboarding: Boolean(f.onboarding_pendiente && f.onboarding_abierto),
     debeCambiar: f.debe_cambiar_contrasena,
     permisos,
     // ¿Puede hacer esta acción en este módulo?

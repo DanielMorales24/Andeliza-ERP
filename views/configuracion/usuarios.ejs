@@ -79,13 +79,9 @@
       <label for="u-usuario" class="etiqueta mt-4">Usuario (para iniciar sesión)</label>
       <input id="u-usuario" class="campo" x-model="f.usuario" maxlength="60" required autocomplete="off" autocapitalize="none" spellcheck="false" :disabled="Boolean(f.id)">
 
-      <div x-show="!f.id">
-        <label for="u-contrasena" class="etiqueta mt-4">Contraseña inicial</label>
-        <div class="relative">
-          <input id="u-contrasena" class="campo pr-20" :type="ver ? 'text' : 'password'" x-model="f.contrasena" maxlength="72" autocomplete="new-password">
-          <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 px-2 text-xs font-medium text-primario" @click="ver = !ver" x-text="ver ? 'Ocultar' : 'Mostrar'"></button>
-        </div>
-        <p class="mt-1 text-xs text-gray-500">Mínimo 8 caracteres, con letras y números.</p>
+      <%# El campo de contraseña vive en su propio componente y le pasa al formulario lo escrito y si ya es válido %>
+      <div x-show="!f.id" x-data="claveSegura()" x-effect="usuario = f.usuario || ''; f.contrasena = clave; f.claveValida = valida; if (!m) limpiar()">
+        <%- include('../partials/clave', { campo: { id: 'u-contrasena', nombre: '', nombreConfirmar: '', etiqueta: 'Contraseña inicial', etiquetaConfirmar: 'Confirma la contraseña', requerido: false } }) %>
         <label class="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" x-model="f.debe_cambiar"> Pedir que la cambie en su primer inicio de sesión</label>
       </div>
 
@@ -97,7 +93,7 @@
 
       <div class="mt-6 flex gap-3">
         <button type="button" class="btn btn-secundario h-11 flex-1" @click="cerrarTodo()">Cancelar</button>
-        <button type="submit" class="btn btn-primario h-11 flex-1" :disabled="guardando" x-text="guardando ? 'Guardando…' : (f.id ? 'Guardar cambios' : 'Crear usuario')"></button>
+        <button type="submit" class="btn btn-primario h-11 flex-1" data-guardar-usuario :disabled="guardando || (!f.id && !f.claveValida)" x-text="guardando ? 'Guardando…' : (f.id ? 'Guardar cambios' : 'Crear usuario')"></button>
       </div>
     </form>
   </div>
@@ -134,3 +130,4 @@
 </div>
 
 <script src="/js/configuracion.js"></script>
+<script src="/js/contrasena.js"></script>

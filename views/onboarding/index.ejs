@@ -1,0 +1,237 @@
+<%
+  // Asistente de configuración inicial: un paso por pantalla. El servidor decide qué paso se muestra.
+  const v = valores || {};
+  const dato = (campo, guardado) => (v[campo] !== undefined ? v[campo] : (guardado || ''));
+  const actual = pasos[paso - 1];
+%>
+<main class="mx-auto max-w-3xl px-5 py-8">
+  <div class="mb-6" data-progreso>
+    <div class="flex items-baseline justify-between gap-3">
+      <p class="text-sm font-semibold" style="color: var(--primario)">Paso <%= paso %> de <%= total %></p>
+      <p class="text-sm text-gray-600"><%= actual.titulo %><% if (actual.opcional) { %> <span class="ml-1 rounded-full bg-gray-200 px-2 py-0.5 text-xs">opcional</span><% } %></p>
+    </div>
+    <div class="mt-2 h-2 overflow-hidden rounded-full bg-gray-200" role="progressbar" aria-label="Avance de la configuración" aria-valuemin="1" aria-valuemax="<%= total %>" aria-valuenow="<%= paso %>">
+      <div class="h-full rounded-full transition-all" style="width: <%= Math.round((paso * 100) / total) %>%; background: var(--primario)"></div>
+    </div>
+  </div>
+
+  <% if (error) { %>
+    <div role="alert" class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><%= error %></div>
+  <% } %>
+
+  <section class="rounded-xl border border-borde bg-white p-6 shadow-sm sm:p-8" data-paso="<%= paso %>">
+
+    <% if (paso === 1) { %>
+      <h1 class="font-titulo text-3xl font-semibold">Hola, este es tu sistema Andeliza ERP</h1>
+      <p class="mt-2 text-gray-600">Vamos a configurarlo en 5 pasos rápidos. Tú decides cuándo: tu avance se guarda y puedes continuar después.</p>
+      <ol class="mt-6 space-y-3">
+        <% [['store', 'Datos del negocio', 'RTN, dirección, teléfono y correo: salen en tus facturas.', false],
+            ['image', 'Logo', 'La imagen de tu negocio en pantalla y en los documentos.', false],
+            ['palette', 'Colores', 'La paleta que le da identidad a tu sistema.', false],
+            ['ruler', 'Unidades y movimientos', 'En qué vendes (por unidad, por par, por metro…) y qué gastos e ingresos registras.', true],
+            ['user-plus', 'Primer vendedor', 'La cuenta de la persona que atenderá la caja.', true]].forEach((p, i) => { %>
+          <li class="flex items-start gap-3 rounded-lg border border-borde p-3">
+            <span class="ins-marca flex h-9 w-9 flex-none items-center justify-center rounded-lg"><%- icono(p[0], 'h-5 w-5') %></span>
+            <div class="min-w-0 flex-1">
+              <p class="font-medium"><%= i + 1 %>. <%= p[1] %> <span class="ml-1 rounded-full px-2 py-0.5 text-xs <%= p[3] ? 'bg-gray-100 text-gray-600' : 'bg-amber-100 text-amber-900' %>"><%= p[3] ? 'opcional' : 'necesario' %></span></p>
+              <p class="text-sm text-gray-600"><%= p[2] %></p>
+            </div>
+          </li>
+        <% }) %>
+      </ol>
+      <form method="post" action="/onboarding/1" class="mt-6 flex justify-end">
+        <button type="submit" class="btn btn-primario h-11 px-6" data-continuar>Empezar</button>
+      </form>
+
+    <% } else if (paso === 2) { %>
+      <h1 class="font-titulo text-2xl font-semibold">Datos del negocio</h1>
+      <p class="mt-1 text-sm text-gray-600">Aparecen en tus facturas, cotizaciones y reportes. Los cuatro son necesarios.</p>
+      <form method="post" action="/onboarding/2" x-data="onbDatos" class="mt-5">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label for="o-rtn" class="etiqueta">RTN</label>
+            <input id="o-rtn" name="rtn" class="campo tabular-nums" inputmode="numeric" maxlength="20" autocomplete="off" required autofocus value="<%= dato('rtn', negocio.rtn) %>" x-model="rtn" placeholder="14 dígitos">
+            <p class="mt-1 text-xs" :class="rtnOk ? 'text-emerald-700' : 'text-gray-500'" x-text="rtnOk ? '✓ 14 dígitos' : 'Son 14 dígitos, sin letras.'" data-pista="rtn"></p>
+          </div>
+          <div>
+            <label for="o-telefono" class="etiqueta">Teléfono</label>
+            <input id="o-telefono" name="telefono" class="campo" type="tel" inputmode="tel" maxlength="30" autocomplete="off" required value="<%= dato('telefono', negocio.telefono) %>" x-model="telefono" placeholder="2550-0000">
+            <p class="mt-1 text-xs" :class="telefonoOk ? 'text-emerald-700' : 'text-gray-500'" x-text="telefonoOk ? '✓ Teléfono válido' : 'Al menos 8 dígitos.'" data-pista="telefono"></p>
+          </div>
+          <div class="sm:col-span-2">
+            <label for="o-direccion" class="etiqueta">Dirección</label>
+            <input id="o-direccion" name="direccion" class="campo" maxlength="255" autocomplete="off" required value="<%= dato('direccion', negocio.direccion) %>" x-model="direccion" placeholder="Barrio, calle, ciudad">
+          </div>
+          <div class="sm:col-span-2">
+            <label for="o-correo" class="etiqueta">Correo</label>
+            <input id="o-correo" name="correo" class="campo" type="email" inputmode="email" maxlength="150" autocomplete="off" required value="<%= dato('correo', negocio.correo) %>" x-model="correo" placeholder="ventas@minegocio.hn">
+            <p class="mt-1 text-xs" :class="correoOk ? 'text-emerald-700' : 'text-gray-500'" x-text="correoOk ? '✓ Correo válido' : 'Por ejemplo: ventas@minegocio.hn'" data-pista="correo"></p>
+          </div>
+        </div>
+        <div class="mt-6 flex items-center justify-between gap-3">
+          <% if (puedeVolver) { %><a href="/onboarding?paso=1" class="btn btn-secundario h-11 px-5" data-atras>Atrás</a><% } else { %><span></span><% } %>
+          <button type="submit" class="btn btn-primario h-11 px-6" :disabled="!valido" data-continuar>Continuar</button>
+        </div>
+      </form>
+
+    <% } else if (paso === 3) { %>
+      <h1 class="font-titulo text-2xl font-semibold">Logo del negocio</h1>
+      <p class="mt-1 text-sm text-gray-600">Imagen PNG o JPG de al menos <%= logoMinimo %> × <%= logoMinimo %> píxeles y hasta 3 MB. Se muestra en el sistema y se imprime en tus documentos.</p>
+      <form method="post" action="/onboarding/3" enctype="multipart/form-data" x-data="onbLogo" data-minimo="<%= logoMinimo %>" data-actual="<%= negocio.logoPropio ? negocio.logoUrl : '' %>" class="mt-5">
+        <div class="flex flex-col items-center gap-5 sm:flex-row">
+          <div class="flex h-40 w-40 flex-none items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-borde bg-fondo" data-vista-logo>
+            <img x-show="vista" x-cloak :src="vista" alt="Vista previa del logo" class="h-full w-full object-contain">
+            <span x-show="!vista" class="text-gray-400"><%- icono('image', 'h-12 w-12') %></span>
+          </div>
+          <div class="min-w-0 flex-1">
+            <label for="o-logo" class="btn btn-secundario h-11 cursor-pointer px-5" x-text="vista ? 'Cambiar imagen' : 'Elegir imagen'">Elegir imagen</label>
+            <input id="o-logo" name="logo" type="file" accept="image/png,image/jpeg" class="sr-only" @change="elegir($event)">
+            <p class="mt-3 text-sm text-emerald-700" x-show="medidas" x-cloak x-text="medidas" data-medidas></p>
+            <p class="mt-3 text-sm text-red-700" x-show="aviso" x-cloak x-text="aviso" role="alert" data-aviso-logo></p>
+            <p class="mt-3 text-sm text-gray-600" x-show="!medidas && !aviso && tieneGuardado">Este es el logo que ya subiste. Puedes continuar o cambiarlo.</p>
+          </div>
+        </div>
+        <div class="mt-6 flex items-center justify-between gap-3">
+          <% if (puedeVolver) { %><a href="/onboarding?paso=2" class="btn btn-secundario h-11 px-5" data-atras>Atrás</a><% } else { %><span></span><% } %>
+          <button type="submit" class="btn btn-primario h-11 px-6" :disabled="!listo" data-continuar>Continuar</button>
+        </div>
+      </form>
+
+    <% } else if (paso === 4) { %>
+      <h1 class="font-titulo text-2xl font-semibold">Colores del negocio</h1>
+      <p class="mt-1 text-sm text-gray-600">Elige la paleta que más se parezca a tu marca. Todas están comprobadas para que el texto se lea bien. Podrás cambiarla después en Configuración.</p>
+      <script type="application/json" id="datos-paletas"><%- JSON.stringify(paletas.map((p) => ({ id: p.id, nombre: p.nombre, primario: p.primario, acento: p.acento, acentoFuerte: p.acentoFuerte }))) %></script>
+      <form method="post" action="/onboarding/4" x-data="onbPaleta" data-elegida="<%= alcanzado > 4 ? negocio.paletaId : '' %>" class="mt-5">
+        <div class="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Paletas de colores">
+          <% paletas.forEach((p) => { %>
+            <label class="block cursor-pointer overflow-hidden rounded-xl border-2 transition" :class="elegida === '<%= p.id %>' ? 'border-gray-900 shadow-md' : 'border-borde hover:border-gray-400'" data-paleta="<%= p.id %>">
+              <input type="radio" name="paleta_id" value="<%= p.id %>" class="sr-only" x-model="elegida">
+              <div class="flex h-10" aria-hidden="true">
+                <span class="flex-1" style="background: <%= p.primario %>"></span>
+                <span class="w-1/4" style="background: <%= p.acento %>"></span>
+              </div>
+              <div class="p-3">
+                <div class="flex items-center justify-between gap-2">
+                  <p class="font-medium"><%= p.nombre %></p>
+                  <span class="text-xs font-semibold text-gray-900" x-show="elegida === '<%= p.id %>'" x-cloak>✓ Elegida</span>
+                </div>
+                <div class="mt-2 flex flex-wrap items-center gap-2 text-sm" aria-hidden="true">
+                  <span class="rounded px-3 py-1 text-xs font-semibold text-white" style="background: <%= p.primario %>">Cobrar</span>
+                  <span class="font-semibold" style="color: <%= p.primario %>">Total L 250.00</span>
+                  <span class="rounded-full px-2 py-0.5 text-xs font-medium" style="background: <%= p.acento %>; color: #1f2430">Nuevo</span>
+                </div>
+              </div>
+            </label>
+          <% }) %>
+        </div>
+
+        <div class="mt-5 rounded-xl border border-borde" data-vista-paleta>
+          <p class="border-b border-borde px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Así se verá tu sistema</p>
+          <div x-show="!actual" class="px-4 py-6 text-center text-sm text-gray-500">Elige una paleta para ver cómo queda.</div>
+          <div x-show="actual" x-cloak>
+            <div class="flex items-center gap-3 px-4 py-3 text-white" :style="actual ? 'background:' + actual.primario : ''" data-vista-encabezado>
+              <span class="font-titulo text-lg font-semibold"><%= negocio.nombre %></span>
+              <span class="ml-auto border-l-4 pl-2 text-sm" :style="actual ? 'border-color:' + actual.acento : ''">Punto de venta</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-3 px-4 py-4">
+              <span class="rounded px-4 py-2 text-sm font-semibold text-white" :style="actual ? 'background:' + actual.primario : ''" data-vista-boton>Botón principal</span>
+              <span class="text-sm font-semibold underline" :style="actual ? 'color:' + actual.primario : ''">Un enlace</span>
+              <span class="rounded-full px-2.5 py-0.5 text-xs font-medium" :style="actual ? 'background:' + actual.acento + ';color:#1f2430' : ''">Etiqueta</span>
+              <span class="flex h-10 items-end gap-1" aria-hidden="true">
+                <span class="w-3 rounded-t" :style="actual ? 'height:60%;background:' + actual.primario : ''"></span>
+                <span class="w-3 rounded-t" :style="actual ? 'height:100%;background:' + actual.acentoFuerte : ''"></span>
+                <span class="w-3 rounded-t" :style="actual ? 'height:40%;background:' + actual.primario : ''"></span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-6 flex items-center justify-between gap-3">
+          <% if (puedeVolver) { %><a href="/onboarding?paso=3" class="btn btn-secundario h-11 px-5" data-atras>Atrás</a><% } else { %><span></span><% } %>
+          <button type="submit" class="btn btn-primario h-11 px-6" :disabled="!elegida" data-continuar>Continuar</button>
+        </div>
+      </form>
+
+    <% } else if (paso === 5) { %>
+      <h1 class="font-titulo text-2xl font-semibold">Unidades de venta</h1>
+      <p class="mt-1 text-sm text-gray-600">Marca en qué vendes tus productos. Solo las marcadas aparecerán al crear un producto. Puedes cambiarlas cuando quieras en Configuración.</p>
+      <form method="post" action="/onboarding/5" x-data="onbUnidades" class="mt-5">
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <% unidades.forEach((u) => { %>
+            <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-borde px-3 py-2.5 text-sm hover:bg-fondo">
+              <input type="checkbox" name="unidades" value="<%= u.clave %>" <%= negocio.catalogo.unidades.includes(u.clave) ? 'checked' : '' %> @change="contar()">
+              <span class="min-w-0 flex-1"><%= u.nombre %><% if (u.decimal) { %><span class="block text-xs text-gray-500">se vende en fracciones</span><% } %></span>
+            </label>
+          <% }) %>
+        </div>
+        <p class="mt-3 text-sm text-gray-600" data-contador><span x-text="marcadas"></span> <span x-text="marcadas === 1 ? 'unidad marcada' : 'unidades marcadas'"></span></p>
+
+        <input type="hidden" name="seccion_movimientos" value="1">
+        <h2 class="mt-8 font-titulo text-xl font-semibold">Gastos e ingresos</h2>
+        <p class="mt-1 text-sm text-gray-600">Qué gastos pagas y qué otros ingresos recibes, además de tus ventas. Cada uno tiene su cuenta en la contabilidad. Puedes cambiarlos después en Configuración.</p>
+        <div class="mt-4 grid gap-5 sm:grid-cols-2">
+          <fieldset>
+            <legend class="text-sm font-semibold">Gastos <span class="font-normal text-gray-500" data-contador-gastos x-text="'(' + gastos + ')'"></span></legend>
+            <div class="mt-2 space-y-1.5">
+              <% categoriasGasto.forEach((x) => { %>
+                <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-borde px-3 py-2 text-sm hover:bg-fondo">
+                  <input type="checkbox" name="categorias_gasto" value="<%= x.clave %>" <%= negocio.catalogo.categoriasGasto.includes(x.clave) ? 'checked' : '' %> @change="contar()">
+                  <span><%= x.nombre %></span>
+                </label>
+              <% }) %>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend class="text-sm font-semibold">Otros ingresos <span class="font-normal text-gray-500" data-contador-ingresos x-text="'(' + ingresos + ')'"></span></legend>
+            <div class="mt-2 space-y-1.5">
+              <% tiposIngreso.forEach((x) => { %>
+                <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-borde px-3 py-2 text-sm hover:bg-fondo">
+                  <input type="checkbox" name="tipos_ingreso" value="<%= x.clave %>" <%= negocio.catalogo.tiposIngreso.includes(x.clave) ? 'checked' : '' %> @change="contar()">
+                  <span><%= x.nombre %></span>
+                </label>
+              <% }) %>
+            </div>
+          </fieldset>
+        </div>
+        <p class="mt-3 text-sm text-red-700" x-show="gastos === 0 || ingresos === 0" x-cloak data-aviso-movimientos>Deja marcado al menos un gasto y un ingreso.</p>
+        <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <% if (puedeVolver) { %><a href="/onboarding?paso=4" class="btn btn-secundario h-11 px-5" data-atras>Atrás</a><% } else { %><span></span><% } %>
+          <div class="flex gap-3">
+            <button type="submit" name="accion" value="saltar" formnovalidate class="btn btn-secundario h-11 px-5" data-saltar>Saltar por ahora</button>
+            <button type="submit" name="accion" value="guardar" class="btn btn-primario h-11 px-6" :disabled="marcadas === 0 || gastos === 0 || ingresos === 0" data-continuar>Guardar y continuar</button>
+          </div>
+        </div>
+      </form>
+
+    <% } else { %>
+      <h1 class="font-titulo text-2xl font-semibold">Tu primer vendedor</h1>
+      <p class="mt-1 text-sm text-gray-600">Crea la cuenta de la persona que atenderá la caja. Entrará con el rol de vendedor y el sistema le pedirá cambiar la contraseña la primera vez. Si prefieres, sáltalo y créala después en Configuración → Usuarios.</p>
+      <div x-data="{ nombre: '' }" data-nombre="<%= dato('nombre', '') %>" x-init="nombre = $el.dataset.nombre">
+        <form method="post" action="/onboarding/6" x-data="claveSegura()" data-usuario="<%= dato('usuario', '') %>" x-init="usuario = $el.dataset.usuario" class="mt-5">
+          <div class="grid gap-x-4 sm:grid-cols-2">
+            <div>
+              <label for="v-nombre" class="etiqueta">Nombre completo</label>
+              <input id="v-nombre" name="nombre" class="campo" maxlength="150" autocomplete="off" x-model="nombre">
+            </div>
+            <div>
+              <label for="v-usuario" class="etiqueta mt-4 sm:mt-0">Usuario (para iniciar sesión)</label>
+              <input id="v-usuario" name="usuario" class="campo" maxlength="60" autocomplete="off" autocapitalize="none" spellcheck="false" x-model="usuario">
+            </div>
+          </div>
+          <%- include('../partials/clave', { campo: { id: 'v-contrasena', nombre: 'contrasena', nombreConfirmar: 'confirmar', etiqueta: 'Contraseña inicial', etiquetaConfirmar: 'Confirma la contraseña', requerido: false } }) %>
+          <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
+            <% if (puedeVolver) { %><a href="/onboarding?paso=5" class="btn btn-secundario h-11 px-5" data-atras>Atrás</a><% } else { %><span></span><% } %>
+            <div class="flex flex-wrap gap-3">
+              <button type="submit" name="accion" value="saltar" formnovalidate class="btn btn-secundario h-11 px-5" data-saltar>Saltar y completar</button>
+              <button type="submit" name="accion" value="crear" class="btn btn-primario h-11 px-6" :disabled="!valida || !nombre.trim() || !usuario.trim()" data-continuar>Completar configuración</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    <% } %>
+  </section>
+
+  <p class="mt-4 text-center text-xs text-gray-500">Tu avance se guarda en cada paso. Puedes salir y continuar después.</p>
+</main>
+<script src="/js/contrasena.js"></script>
+<script src="/js/onboarding.js"></script>

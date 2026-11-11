@@ -124,7 +124,7 @@ function periodo(q, est) {
 
 async function base() {
   const negocio = await Negocio.obtener();
-  return { negocio, logo: await Negocio.logo(negocio.logoUrl), color: config.negocio.colores.primario };
+  return { negocio, logo: await Negocio.logo(negocio.logoUrl), color: negocio.colores.primario };
 }
 
 async function enviarPdf(res, buffer, nombre, descargar) {

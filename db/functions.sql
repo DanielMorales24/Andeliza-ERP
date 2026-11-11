@@ -1,5 +1,5 @@
 -- =====================================================================
--- functions.sql  |  Las RPCs críticas (correr DESPUÉS de las migraciones 01 a 04)
+-- functions.sql  |  Las RPCs críticas (correr DESPUÉS de las migraciones 01 a 08)
 -- Todo es CREATE OR REPLACE: se puede volver a correr completo sin problema.
 --
 -- Facturación en dos modos:
@@ -608,7 +608,10 @@ DECLARE
   v_pid    BIGINT;
   v_cuenta BIGINT;
 BEGIN
-  IF p_tipo IS NULL OR p_tipo NOT IN ('intereses', 'alquileres', 'servicios', 'inversiones', 'otros') THEN
+  -- Un tipo es válido si existe su cuenta de ingreso activa en el plan de cuentas (ingreso_<tipo>).
+  -- Agregar un tipo nuevo es agregar su cuenta (ver la migración 08), sin cambiar esta función.
+  IF p_tipo IS NULL OR p_tipo !~ '^[a-z_]{1,30}$'
+     OR NOT EXISTS (SELECT 1 FROM plan_cuentas WHERE clave = 'ingreso_' || p_tipo AND tipo = 'ingreso' AND activo) THEN
     RAISE EXCEPTION 'El tipo de ingreso no es válido.';
   END IF;
   IF p_monto IS NULL OR p_monto <= 0 THEN RAISE EXCEPTION 'El monto del ingreso debe ser mayor que cero.'; END IF;
@@ -672,7 +675,10 @@ DECLARE
   v_pid    BIGINT;
   v_cuenta BIGINT;
 BEGIN
-  IF p_categoria IS NULL OR p_categoria NOT IN ('logistica', 'marketing', 'operativos', 'mantenimiento', 'otros') THEN
+  -- Una categoría es válida si existe su cuenta de gasto activa en el plan de cuentas (gasto_<categoría>).
+  -- Agregar una categoría nueva es agregar su cuenta (ver la migración 08), sin cambiar esta función.
+  IF p_categoria IS NULL OR p_categoria !~ '^[a-z_]{1,30}$'
+     OR NOT EXISTS (SELECT 1 FROM plan_cuentas WHERE clave = 'gasto_' || p_categoria AND tipo = 'gasto' AND activo) THEN
     RAISE EXCEPTION 'La categoría del gasto no es válida.';
   END IF;
   IF p_monto IS NULL OR p_monto <= 0 THEN RAISE EXCEPTION 'El monto del gasto debe ser mayor que cero.'; END IF;
@@ -1025,3 +1031,481 @@ BEGIN
     PERFORM generar_apertura_contable();
   END IF;
 END $$;
+
+
+-- =====================================================================
+-- SEGURIDAD (Fase 7): contraseñas, sesiones, roles y permisos
+-- (Decisión de arquitectura D-01: esta fase se hizo antes que Estadísticas para que estas puedan medir por vendedor y por rol.)
+-- Toda la lógica que decide si una cuenta entra, se bloquea o cambia de
+-- contraseña vive aquí, en la base, para que sea atómica y no se pueda saltar.
+-- Las contraseñas se guardan con bcrypt (pgcrypto). Se puede volver a correr completo.
+-- =====================================================================
+
+-- Anotar en la auditoría (la usan las demás funciones y también el servidor)
+CREATE OR REPLACE FUNCTION registrar_auditoria(
+  p_usuario_id BIGINT, p_accion VARCHAR, p_entidad VARCHAR, p_entidad_id BIGINT,
+  p_descripcion TEXT, p_detalles JSONB DEFAULT NULL, p_ip TEXT DEFAULT NULL
+)
+RETURNS BIGINT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_id BIGINT;
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, entidad, entidad_id, descripcion, detalles, ip)
+  VALUES (p_usuario_id, LEFT(p_accion, 50), LEFT(p_entidad, 50), p_entidad_id, p_descripcion, p_detalles, LEFT(p_ip, 64))
+  RETURNING id INTO v_id;
+  RETURN v_id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION hash_contrasena(p_texto TEXT)
+RETURNS TEXT
+LANGUAGE sql VOLATILE
+SET search_path = public, extensions
+AS $$
+  SELECT crypt(p_texto, gen_salt('bf', 10))
+$$;
+
+-- Política de contraseñas: 8 a 72 caracteres, con letras y números, y distinta del usuario
+CREATE OR REPLACE FUNCTION validar_contrasena(p_texto TEXT, p_usuario TEXT DEFAULT NULL)
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF p_texto IS NULL OR LENGTH(p_texto) < 8 THEN
+    RAISE EXCEPTION 'La contraseña debe tener al menos 8 caracteres.';
+  END IF;
+  IF OCTET_LENGTH(p_texto) > 72 THEN
+    RAISE EXCEPTION 'La contraseña no puede tener más de 72 caracteres.';
+  END IF;
+  IF p_texto !~ '[[:alpha:]]' OR p_texto !~ '[0-9]' THEN
+    RAISE EXCEPTION 'La contraseña debe combinar letras y números.';
+  END IF;
+  IF p_usuario IS NOT NULL AND LOWER(p_texto) = LOWER(p_usuario) THEN
+    RAISE EXCEPTION 'La contraseña no puede ser igual al usuario.';
+  END IF;
+END;
+$$;
+
+-- Cuántos administradores activos hay, sin contar a uno (para no quedarse sin ninguno)
+CREATE OR REPLACE FUNCTION otros_administradores_activos(p_excepto BIGINT)
+RETURNS INT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_n INT;
+BEGIN
+  PERFORM 1 FROM usuarios u JOIN roles r ON r.id = u.rol_id
+   WHERE r.nombre = 'admin' AND r.es_sistema AND u.activo FOR UPDATE OF u;   -- serializa cambios simultáneos
+  SELECT COUNT(*) INTO v_n FROM usuarios u JOIN roles r ON r.id = u.rol_id
+   WHERE r.nombre = 'admin' AND r.es_sistema AND u.activo AND u.id <> p_excepto;
+  RETURN v_n;
+END;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Inicio de sesión. NO lanza error en los fallos: devuelve el motivo, para que el
+-- conteo de intentos quede guardado (un error revertiría la transacción).
+--   motivos: credenciales | bloqueado | inactivo | rol_inactivo
+-- 5 intentos fallidos seguidos bloquean la cuenta 15 minutos.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION autenticar_usuario(p_usuario TEXT, p_contrasena TEXT, p_ip TEXT DEFAULT NULL)
+RETURNS JSONB
+LANGUAGE plpgsql
+SET search_path = public, extensions
+AS $$
+DECLARE
+  u         usuarios%ROWTYPE;
+  v_rol     roles%ROWTYPE;
+  v_ok      BOOLEAN;
+  c_maximo  CONSTANT INT := 5;
+  c_minutos CONSTANT INT := 15;
+BEGIN
+  SELECT * INTO u FROM usuarios WHERE LOWER(usuario) = LOWER(BTRIM(COALESCE(p_usuario, ''))) FOR UPDATE;
+
+  IF NOT FOUND THEN
+    PERFORM crypt(COALESCE(p_contrasena, ''), '$2a$10$abcdefghijklmnopqrstuu');   -- tarda lo mismo que un usuario real
+    PERFORM registrar_auditoria(NULL, 'login_fallido', 'usuarios', NULL,
+      'Intento de inicio de sesión con un usuario que no existe: ' || LEFT(COALESCE(p_usuario, ''), 60), NULL, p_ip);
+    RETURN jsonb_build_object('ok', FALSE, 'motivo', 'credenciales');
+  END IF;
+
+  IF u.bloqueado_hasta IS NOT NULL AND u.bloqueado_hasta > NOW() THEN
+    RETURN jsonb_build_object('ok', FALSE, 'motivo', 'bloqueado',
+      'minutos', CEIL(EXTRACT(EPOCH FROM (u.bloqueado_hasta - NOW())) / 60)::INT);
+  END IF;
+
+  v_ok := (u.contrasena = crypt(COALESCE(p_contrasena, ''), u.contrasena));
+
+  IF NOT v_ok THEN
+    IF u.intentos_fallidos + 1 >= c_maximo THEN
+      UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = NOW() + (c_minutos || ' minutes')::INTERVAL WHERE id = u.id;
+      PERFORM registrar_auditoria(u.id, 'cuenta_bloqueada', 'usuarios', u.id,
+        'La cuenta de ' || u.usuario || ' se bloqueó ' || c_minutos || ' minutos por intentos fallidos', NULL, p_ip);
+      RETURN jsonb_build_object('ok', FALSE, 'motivo', 'bloqueado', 'minutos', c_minutos);
+    END IF;
+    UPDATE usuarios SET intentos_fallidos = intentos_fallidos + 1 WHERE id = u.id;
+    PERFORM registrar_auditoria(u.id, 'login_fallido', 'usuarios', u.id, 'Contraseña incorrecta para ' || u.usuario, NULL, p_ip);
+    RETURN jsonb_build_object('ok', FALSE, 'motivo', 'credenciales', 'restantes', c_maximo - (u.intentos_fallidos + 1));
+  END IF;
+
+  IF NOT u.activo THEN
+    RETURN jsonb_build_object('ok', FALSE, 'motivo', 'inactivo');
+  END IF;
+  SELECT * INTO v_rol FROM roles WHERE id = u.rol_id;
+  IF NOT v_rol.activo THEN
+    RETURN jsonb_build_object('ok', FALSE, 'motivo', 'rol_inactivo');
+  END IF;
+
+  UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = NULL, ultimo_acceso = NOW() WHERE id = u.id;
+  PERFORM registrar_auditoria(u.id, 'login', 'usuarios', u.id, 'Inició sesión', NULL, p_ip);
+  RETURN jsonb_build_object('ok', TRUE, 'usuario_id', u.id, 'debe_cambiar', u.debe_cambiar_contrasena, 'sesion_version', u.sesion_version);
+END;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Usuarios
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION crear_usuario(
+  p_nombre TEXT, p_usuario TEXT, p_contrasena TEXT, p_rol_id BIGINT, p_debe_cambiar BOOLEAN, p_actor_id BIGINT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_rol roles%ROWTYPE;
+  v_id  BIGINT;
+  v_usuario TEXT := BTRIM(COALESCE(p_usuario, ''));
+BEGIN
+  IF BTRIM(COALESCE(p_nombre, '')) = '' THEN RAISE EXCEPTION 'El nombre es obligatorio.'; END IF;
+  IF LENGTH(p_nombre) > 150 THEN RAISE EXCEPTION 'El nombre es demasiado largo.'; END IF;
+  IF v_usuario !~ '^[A-Za-z0-9._-]{3,60}$' THEN
+    RAISE EXCEPTION 'El usuario debe tener de 3 a 60 caracteres: letras, números, punto, guion o guion bajo.';
+  END IF;
+  IF EXISTS (SELECT 1 FROM usuarios WHERE LOWER(usuario) = LOWER(v_usuario)) THEN
+    RAISE EXCEPTION 'Ya existe un usuario con ese nombre de usuario.';
+  END IF;
+  SELECT * INTO v_rol FROM roles WHERE id = p_rol_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'El rol elegido no existe.'; END IF;
+  IF NOT v_rol.activo THEN RAISE EXCEPTION 'El rol "%" está desactivado.', v_rol.nombre; END IF;
+  PERFORM validar_contrasena(p_contrasena, v_usuario);
+
+  INSERT INTO usuarios (nombre, usuario, contrasena, rol_id, debe_cambiar_contrasena, contrasena_cambiada_en)
+  VALUES (BTRIM(p_nombre), v_usuario, hash_contrasena(p_contrasena), p_rol_id, COALESCE(p_debe_cambiar, TRUE), NOW())
+  RETURNING id INTO v_id;
+
+  PERFORM registrar_auditoria(p_actor_id, 'crear_usuario', 'usuarios', v_id,
+    'Creó al usuario ' || v_usuario || ' con el rol ' || v_rol.nombre, NULL, NULL);
+  RETURN jsonb_build_object('id', v_id);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION actualizar_usuario(p_id BIGINT, p_nombre TEXT, p_rol_id BIGINT, p_actor_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  u        usuarios%ROWTYPE;
+  v_actual roles%ROWTYPE;
+  v_nuevo  roles%ROWTYPE;
+BEGIN
+  SELECT * INTO u FROM usuarios WHERE id = p_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'El usuario no existe.'; END IF;
+  IF BTRIM(COALESCE(p_nombre, '')) = '' THEN RAISE EXCEPTION 'El nombre es obligatorio.'; END IF;
+  IF LENGTH(p_nombre) > 150 THEN RAISE EXCEPTION 'El nombre es demasiado largo.'; END IF;
+
+  SELECT * INTO v_actual FROM roles WHERE id = u.rol_id;
+  SELECT * INTO v_nuevo  FROM roles WHERE id = p_rol_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'El rol elegido no existe.'; END IF;
+
+  IF p_rol_id <> u.rol_id THEN
+    IF p_id = p_actor_id THEN RAISE EXCEPTION 'No puedes cambiar tu propio rol.'; END IF;
+    IF NOT v_nuevo.activo THEN RAISE EXCEPTION 'El rol "%" está desactivado.', v_nuevo.nombre; END IF;
+    IF v_actual.nombre = 'admin' AND v_actual.es_sistema AND u.activo AND otros_administradores_activos(p_id) = 0 THEN
+      RAISE EXCEPTION 'Debe quedar al menos un administrador activo.';
+    END IF;
+  END IF;
+
+  UPDATE usuarios SET nombre = BTRIM(p_nombre), rol_id = p_rol_id WHERE id = p_id;
+  PERFORM registrar_auditoria(p_actor_id, 'actualizar_usuario', 'usuarios', p_id,
+    'Actualizó al usuario ' || u.usuario || CASE WHEN p_rol_id <> u.rol_id THEN ' (rol: ' || v_actual.nombre || ' a ' || v_nuevo.nombre || ')' ELSE '' END, NULL, NULL);
+  RETURN jsonb_build_object('id', p_id);
+END;
+$$;
+
+-- Activar o desactivar. Al desactivar se suben la versión de sesión: la persona queda fuera YA.
+CREATE OR REPLACE FUNCTION cambiar_estado_usuario(p_id BIGINT, p_activo BOOLEAN, p_actor_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  u     usuarios%ROWTYPE;
+  v_rol roles%ROWTYPE;
+BEGIN
+  SELECT * INTO u FROM usuarios WHERE id = p_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'El usuario no existe.'; END IF;
+  IF u.activo = p_activo THEN RETURN jsonb_build_object('id', p_id, 'sin_cambios', TRUE); END IF;
+  SELECT * INTO v_rol FROM roles WHERE id = u.rol_id;
+
+  IF NOT p_activo THEN
+    IF p_id = p_actor_id THEN RAISE EXCEPTION 'No puedes desactivar tu propia cuenta.'; END IF;
+    IF v_rol.nombre = 'admin' AND v_rol.es_sistema AND otros_administradores_activos(p_id) = 0 THEN
+      RAISE EXCEPTION 'Debe quedar al menos un administrador activo.';
+    END IF;
+    UPDATE usuarios SET activo = FALSE, sesion_version = sesion_version + 1 WHERE id = p_id;
+  ELSE
+    UPDATE usuarios SET activo = TRUE, intentos_fallidos = 0, bloqueado_hasta = NULL WHERE id = p_id;
+  END IF;
+
+  PERFORM registrar_auditoria(p_actor_id, CASE WHEN p_activo THEN 'activar_usuario' ELSE 'desactivar_usuario' END, 'usuarios', p_id,
+    CASE WHEN p_activo THEN 'Reactivó al usuario ' ELSE 'Desactivó al usuario ' END || u.usuario, NULL, NULL);
+  RETURN jsonb_build_object('id', p_id, 'activo', p_activo);
+END;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Cambio de contraseña por la propia persona (pide la actual)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION cambiar_contrasena(p_usuario_id BIGINT, p_actual TEXT, p_nueva TEXT, p_ip TEXT DEFAULT NULL)
+RETURNS JSONB
+LANGUAGE plpgsql
+SET search_path = public, extensions
+AS $$
+DECLARE
+  u usuarios%ROWTYPE;
+BEGIN
+  SELECT * INTO u FROM usuarios WHERE id = p_usuario_id AND activo FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'El usuario no existe o está desactivado.'; END IF;
+  PERFORM validar_contrasena(p_nueva, u.usuario);
+
+  IF u.contrasena <> crypt(COALESCE(p_actual, ''), u.contrasena) THEN
+    IF u.intentos_fallidos + 1 >= 5 THEN
+      UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = NOW() + INTERVAL '15 minutes', sesion_version = sesion_version + 1 WHERE id = u.id;
+    ELSE
+      UPDATE usuarios SET intentos_fallidos = intentos_fallidos + 1 WHERE id = u.id;
+    END IF;
+    PERFORM registrar_auditoria(u.id, 'cambio_contrasena_fallido', 'usuarios', u.id, 'Contraseña actual incorrecta al intentar cambiarla', NULL, p_ip);
+    RETURN jsonb_build_object('ok', FALSE, 'motivo', 'actual_incorrecta');
+  END IF;
+  IF u.contrasena = crypt(p_nueva, u.contrasena) THEN
+    RAISE EXCEPTION 'La nueva contraseña debe ser distinta de la actual.';
+  END IF;
+
+  UPDATE usuarios
+     SET contrasena = hash_contrasena(p_nueva), debe_cambiar_contrasena = FALSE, intentos_fallidos = 0, bloqueado_hasta = NULL,
+         contrasena_cambiada_en = NOW(), sesion_version = sesion_version + 1
+   WHERE id = u.id;
+  PERFORM registrar_auditoria(u.id, 'cambiar_contrasena', 'usuarios', u.id, 'Cambió su contraseña', NULL, p_ip);
+  RETURN jsonb_build_object('ok', TRUE, 'sesion_version', u.sesion_version + 1);
+END;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Recuperación: el administrador genera un código temporal (30 minutos, un solo uso)
+-- y la persona lo usa para elegir una contraseña nueva. Se guarda solo el hash del código.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION generar_codigo_recuperacion(p_usuario_id BIGINT, p_actor_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SET search_path = public, extensions
+AS $$
+DECLARE
+  u         usuarios%ROWTYPE;
+  v_alfabeto CONSTANT TEXT := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   -- sin 0, O, 1, I (no se confunden)
+  v_bytes   BYTEA := gen_random_bytes(8);
+  v_codigo  TEXT := '';
+  v_expira  TIMESTAMPTZ := NOW() + INTERVAL '30 minutes';
+  i INT;
+BEGIN
+  SELECT * INTO u FROM usuarios WHERE id = p_usuario_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'El usuario no existe.'; END IF;
+  IF NOT u.activo THEN RAISE EXCEPTION 'El usuario está desactivado: reactívalo antes de generar un código.'; END IF;
+
+  FOR i IN 0..7 LOOP
+    v_codigo := v_codigo || SUBSTR(v_alfabeto, (get_byte(v_bytes, i) % 32) + 1, 1);
+  END LOOP;
+
+  UPDATE recuperacion_contrasena SET usado = TRUE, usado_en = NOW() WHERE usuario_id = u.id AND NOT usado;   -- el anterior queda inválido
+  INSERT INTO recuperacion_contrasena (usuario_id, codigo, expiracion, creado_por)
+  VALUES (u.id, encode(digest(v_codigo, 'sha256'), 'hex'), v_expira, p_actor_id);
+
+  PERFORM registrar_auditoria(p_actor_id, 'generar_codigo_recuperacion', 'usuarios', u.id,
+    'Generó un código de recuperación de contraseña para ' || u.usuario, NULL, NULL);
+  RETURN jsonb_build_object('codigo', SUBSTR(v_codigo, 1, 4) || '-' || SUBSTR(v_codigo, 5, 4), 'expiracion', v_expira, 'minutos', 30);
+END;
+$$;
+
+-- Usa el código. Los fallos NO lanzan error (para guardar el conteo de intentos y bloquear).
+CREATE OR REPLACE FUNCTION usar_codigo_recuperacion(p_usuario TEXT, p_codigo TEXT, p_nueva TEXT, p_ip TEXT DEFAULT NULL)
+RETURNS JSONB
+LANGUAGE plpgsql
+SET search_path = public, extensions
+AS $$
+DECLARE
+  u        usuarios%ROWTYPE;
+  v_norm   TEXT := UPPER(REGEXP_REPLACE(COALESCE(p_codigo, ''), '[^A-Za-z0-9]', '', 'g'));
+  v_id     BIGINT;
+BEGIN
+  SELECT * INTO u FROM usuarios WHERE LOWER(usuario) = LOWER(BTRIM(COALESCE(p_usuario, ''))) FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok', FALSE, 'motivo', 'codigo_invalido');
+  END IF;
+  IF u.bloqueado_hasta IS NOT NULL AND u.bloqueado_hasta > NOW() THEN
+    RETURN jsonb_build_object('ok', FALSE, 'motivo', 'bloqueado', 'minutos', CEIL(EXTRACT(EPOCH FROM (u.bloqueado_hasta - NOW())) / 60)::INT);
+  END IF;
+
+  PERFORM validar_contrasena(p_nueva, u.usuario);   -- una contraseña débil se rechaza sin gastar el código
+
+  SELECT id INTO v_id FROM recuperacion_contrasena
+   WHERE usuario_id = u.id AND NOT usado AND expiracion > NOW() AND codigo = encode(digest(v_norm, 'sha256'), 'hex')
+   FOR UPDATE;
+
+  IF v_id IS NULL OR NOT u.activo THEN
+    IF u.intentos_fallidos + 1 >= 5 THEN
+      UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = NOW() + INTERVAL '15 minutes' WHERE id = u.id;
+      PERFORM registrar_auditoria(u.id, 'cuenta_bloqueada', 'usuarios', u.id,
+        'La cuenta de ' || u.usuario || ' se bloqueó 15 minutos por intentos fallidos con códigos de recuperación', NULL, p_ip);
+      RETURN jsonb_build_object('ok', FALSE, 'motivo', 'bloqueado', 'minutos', 15);
+    END IF;
+    UPDATE usuarios SET intentos_fallidos = intentos_fallidos + 1 WHERE id = u.id;
+    PERFORM registrar_auditoria(u.id, 'recuperacion_fallida', 'usuarios', u.id, 'Código de recuperación incorrecto o vencido para ' || u.usuario, NULL, p_ip);
+    RETURN jsonb_build_object('ok', FALSE, 'motivo', 'codigo_invalido');
+  END IF;
+
+  UPDATE recuperacion_contrasena SET usado = TRUE, usado_en = NOW() WHERE usuario_id = u.id AND NOT usado;
+  UPDATE usuarios
+     SET contrasena = hash_contrasena(p_nueva), debe_cambiar_contrasena = FALSE, intentos_fallidos = 0, bloqueado_hasta = NULL,
+         contrasena_cambiada_en = NOW(), sesion_version = sesion_version + 1
+   WHERE id = u.id;
+  PERFORM registrar_auditoria(u.id, 'recuperar_contrasena', 'usuarios', u.id, 'Cambió su contraseña con un código de recuperación', NULL, p_ip);
+  RETURN jsonb_build_object('ok', TRUE);
+END;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Roles y permisos
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION crear_rol(p_nombre TEXT, p_descripcion TEXT, p_copiar_de BIGINT, p_actor_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_nombre TEXT := BTRIM(COALESCE(p_nombre, ''));
+  v_id     BIGINT;
+BEGIN
+  IF LENGTH(v_nombre) < 2 OR LENGTH(v_nombre) > 40 THEN RAISE EXCEPTION 'El nombre del rol debe tener de 2 a 40 caracteres.'; END IF;
+  IF EXISTS (SELECT 1 FROM roles WHERE LOWER(nombre) = LOWER(v_nombre)) THEN RAISE EXCEPTION 'Ya existe un rol con ese nombre.'; END IF;
+  IF LENGTH(COALESCE(p_descripcion, '')) > 200 THEN RAISE EXCEPTION 'La descripción es demasiado larga (máximo 200 caracteres).'; END IF;
+
+  INSERT INTO roles (nombre, descripcion) VALUES (v_nombre, NULLIF(BTRIM(COALESCE(p_descripcion, '')), '')) RETURNING id INTO v_id;
+
+  IF p_copiar_de IS NOT NULL THEN       -- parte de los permisos de otro rol (menos Configuración)
+    INSERT INTO roles_permisos (rol_id, permiso_id)
+    SELECT v_id, rp.permiso_id FROM roles_permisos rp JOIN permisos p ON p.id = rp.permiso_id
+     WHERE rp.rol_id = p_copiar_de AND p.modulo <> 'configuracion';
+  END IF;
+
+  PERFORM registrar_auditoria(p_actor_id, 'crear_rol', 'roles', v_id, 'Creó el rol ' || v_nombre, NULL, NULL);
+  RETURN jsonb_build_object('id', v_id);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION actualizar_rol(p_id BIGINT, p_nombre TEXT, p_descripcion TEXT, p_activo BOOLEAN, p_actor_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  r        roles%ROWTYPE;
+  v_nombre TEXT := BTRIM(COALESCE(p_nombre, ''));
+  v_n      INT;
+BEGIN
+  SELECT * INTO r FROM roles WHERE id = p_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'El rol no existe.'; END IF;
+  IF LENGTH(COALESCE(p_descripcion, '')) > 200 THEN RAISE EXCEPTION 'La descripción es demasiado larga (máximo 200 caracteres).'; END IF;
+
+  IF r.es_sistema THEN
+    IF LOWER(v_nombre) <> LOWER(r.nombre) THEN RAISE EXCEPTION 'Los roles de fábrica no se pueden renombrar.'; END IF;
+    v_nombre := r.nombre;
+  ELSE
+    IF LENGTH(v_nombre) < 2 OR LENGTH(v_nombre) > 40 THEN RAISE EXCEPTION 'El nombre del rol debe tener de 2 a 40 caracteres.'; END IF;
+    IF EXISTS (SELECT 1 FROM roles WHERE LOWER(nombre) = LOWER(v_nombre) AND id <> p_id) THEN RAISE EXCEPTION 'Ya existe un rol con ese nombre.'; END IF;
+  END IF;
+
+  IF NOT p_activo AND r.activo THEN
+    IF r.nombre = 'admin' AND r.es_sistema THEN RAISE EXCEPTION 'El rol administrador no se puede desactivar.'; END IF;
+    SELECT COUNT(*) INTO v_n FROM usuarios WHERE rol_id = p_id AND activo;
+    IF v_n > 0 THEN RAISE EXCEPTION 'El rol tiene % usuario(s) activo(s). Cámbiales el rol antes de desactivarlo.', v_n; END IF;
+  END IF;
+
+  UPDATE roles SET nombre = v_nombre, descripcion = NULLIF(BTRIM(COALESCE(p_descripcion, '')), ''), activo = p_activo WHERE id = p_id;
+  PERFORM registrar_auditoria(p_actor_id, 'actualizar_rol', 'roles', p_id, 'Actualizó el rol ' || v_nombre || CASE WHEN p_activo <> r.activo THEN (CASE WHEN p_activo THEN ' (activado)' ELSE ' (desactivado)' END) ELSE '' END, NULL, NULL);
+  RETURN jsonb_build_object('id', p_id);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION eliminar_rol(p_id BIGINT, p_actor_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  r roles%ROWTYPE;
+BEGIN
+  SELECT * INTO r FROM roles WHERE id = p_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'El rol no existe.'; END IF;
+  IF r.es_sistema THEN RAISE EXCEPTION 'Los roles de fábrica no se pueden eliminar.'; END IF;
+  IF EXISTS (SELECT 1 FROM usuarios WHERE rol_id = p_id) THEN RAISE EXCEPTION 'El rol tiene usuarios asignados. Cámbiales el rol antes de eliminarlo.'; END IF;
+  DELETE FROM roles WHERE id = p_id;
+  PERFORM registrar_auditoria(p_actor_id, 'eliminar_rol', 'roles', p_id, 'Eliminó el rol ' || r.nombre, NULL, NULL);
+  RETURN jsonb_build_object('id', p_id);
+END;
+$$;
+
+-- Reemplaza los permisos de un rol. Reglas: el admin no se toca, Configuración es solo del admin,
+-- y cualquier acción (crear, editar, eliminar) exige también "ver" en ese módulo.
+CREATE OR REPLACE FUNCTION guardar_permisos_rol(p_rol_id BIGINT, p_permiso_ids BIGINT[], p_actor_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  r        roles%ROWTYPE;
+  v_ids    BIGINT[] := COALESCE(ARRAY(SELECT DISTINCT x FROM UNNEST(COALESCE(p_permiso_ids, '{}'::BIGINT[])) x), '{}');
+  v_mal    BIGINT;
+  v_pre    TEXT;
+  v_agregados TEXT[];
+  v_quitados  TEXT[];
+BEGIN
+  SELECT * INTO r FROM roles WHERE id = p_rol_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'El rol no existe.'; END IF;
+  IF r.nombre = 'admin' AND r.es_sistema THEN RAISE EXCEPTION 'Los permisos del administrador no se pueden cambiar.'; END IF;
+
+  SELECT x INTO v_mal FROM UNNEST(v_ids) x WHERE NOT EXISTS (SELECT 1 FROM permisos WHERE id = x) LIMIT 1;
+  IF v_mal IS NOT NULL THEN RAISE EXCEPTION 'El permiso % no existe.', v_mal; END IF;
+
+  IF EXISTS (SELECT 1 FROM permisos WHERE id = ANY(v_ids) AND modulo = 'configuracion') THEN
+    RAISE EXCEPTION 'Los permisos de Configuración son solo del administrador.';
+  END IF;
+
+  SELECT p.modulo || ' (' || p.accion || ')' INTO v_pre
+    FROM permisos p
+   WHERE p.id = ANY(v_ids) AND p.accion NOT IN ('ver', 'ver_propias')
+     AND NOT EXISTS (SELECT 1 FROM permisos v WHERE v.modulo = p.modulo AND v.accion = 'ver' AND v.id = ANY(v_ids))
+   LIMIT 1;
+  IF v_pre IS NOT NULL THEN
+    RAISE EXCEPTION 'Para dar permiso en % también hace falta el permiso de ver de ese módulo.', v_pre;
+  END IF;
+
+  SELECT COALESCE(ARRAY_AGG(p.modulo || '.' || p.accion ORDER BY p.modulo, p.accion), '{}') INTO v_agregados
+    FROM permisos p WHERE p.id = ANY(v_ids) AND NOT EXISTS (SELECT 1 FROM roles_permisos x WHERE x.rol_id = p_rol_id AND x.permiso_id = p.id);
+  SELECT COALESCE(ARRAY_AGG(p.modulo || '.' || p.accion ORDER BY p.modulo, p.accion), '{}') INTO v_quitados
+    FROM roles_permisos x JOIN permisos p ON p.id = x.permiso_id WHERE x.rol_id = p_rol_id AND NOT (x.permiso_id = ANY(v_ids));
+
+  DELETE FROM roles_permisos WHERE rol_id = p_rol_id;
+  INSERT INTO roles_permisos (rol_id, permiso_id) SELECT p_rol_id, UNNEST(v_ids);
+
+  PERFORM registrar_auditoria(p_actor_id, 'cambiar_permisos_rol', 'roles', p_rol_id,
+    'Cambió los permisos del rol ' || r.nombre || ' (+' || COALESCE(ARRAY_LENGTH(v_agregados, 1), 0) || ' / -' || COALESCE(ARRAY_LENGTH(v_quitados, 1), 0) || ')',
+    jsonb_build_object('agregados', v_agregados, 'quitados', v_quitados), NULL);
+  RETURN jsonb_build_object('rol_id', p_rol_id, 'total', COALESCE(ARRAY_LENGTH(v_ids, 1), 0), 'agregados', v_agregados, 'quitados', v_quitados);
+END;
+$$;

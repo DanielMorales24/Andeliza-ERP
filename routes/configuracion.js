@@ -27,6 +27,9 @@ const g = (accion) => [requireAuth, requirePermiso('configuracion', accion)];
 router.get('/', ...g('ver'), C.negocio);
 router.put('/negocio', ...g('editar'), subidaLogo.single('logo'), C.guardarNegocio);
 router.put('/facturacion', ...g('editar'), C.guardarFacturacion);
+router.put('/apariencia', ...g('editar'), C.guardarPaleta);      // Fase 6.5
+router.put('/regional', ...g('editar'), C.guardarRegional);
+router.put('/catalogo', ...g('editar'), C.guardarCatalogo);
 
 router.get('/usuarios', ...g('ver'), C.usuarios);
 router.get('/usuarios/datos', ...g('ver'), C.usuariosDatos);

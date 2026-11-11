@@ -1,40 +1,56 @@
-// Datos del negocio y de la facturación. Los datos del negocio salen de la tabla
-// configuracion_negocio (editable desde la interfaz en la Fase 7) y, si un campo está
-// vacío, de client.config.js.
+// Datos del negocio y de la facturación de ESTA instancia. Todo sale de la tabla configuracion_negocio:
+// la identidad (nombre, RTN, logo), el formato regional, la paleta y lo que el negocio eligió del
+// catálogo maestro. client.config.js solo aporta los valores de fábrica mientras la base no tiene el dato.
 const fs = require('fs');
 const path = require('path');
 const db = require('../db');
 const config = require('../client.config');
+const Catalogo = require('../utils/catalogo');
+const Colores = require('../utils/colores');
 
-const NOMBRE_POR_DEFECTO_DB = 'Mi Negocio'; // valor que trae schema_es.sql si nadie lo editó
+const NOMBRE_POR_DEFECTO_DB = 'Mi Negocio'; // valor que trae el esquema si nadie lo editó
+const LOGO_GENERICO = '/img/logo.png';
+const FABRICA = config.valoresPorDefecto;
+
+const COLUMNAS_NEGOCIO = `nombre, logo_url, rtn, direccion, telefono, correo, zona_horaria, moneda, formato_fecha, tasa_impuesto,
+  paleta_id, color_primario, color_acento, unidades_activas, tipos_variante_activos, opciones_variante_activas,
+  categorias_gasto_activas, tipos_ingreso_activos, onboarding_completado, onboarding_paso`;
 
 // Sin caché a propósito: en Vercel cada instancia tendría la suya y, tras guardar en Configuración,
-// otra instancia podría seguir mostrando el nombre viejo. Es una lectura por llave primaria.
+// otra instancia podría seguir mostrando lo viejo. Es una lectura por llave primaria.
 function invalidar() { /* nada que invalidar; se deja para no cambiar quién lo llama */ }
 
 async function obtener() {
-  return leerNegocio();
-}
-
-async function leerNegocio() {
-  const base = config.negocio;
   let fila = {};
   try {
-    const { rows } = await db.query(
-      'SELECT nombre, logo_url, rtn, direccion, telefono, correo FROM configuracion_negocio WHERE id = 1'
-    );
+    const { rows } = await db.query(`SELECT ${COLUMNAS_NEGOCIO} FROM configuracion_negocio WHERE id = 1`);
     fila = rows[0] || {};
   } catch (err) {
     console.error('[negocio] no se pudo leer configuracion_negocio:', err.message);
   }
-  const elegir = (valorDb, valorConfig) => (valorDb && String(valorDb).trim() ? String(valorDb).trim() : valorConfig || '');
+  return armar(fila);
+}
+
+// De la fila de la base a lo que usa la aplicación. Lo que falte toma su valor de fábrica.
+function armar(fila) {
+  const texto = (v) => (v && String(v).trim() ? String(v).trim() : '');
+  const base = Catalogo.paleta(FABRICA.paleta);
+  const primario = Colores.normalizar(fila.color_primario) || base.primario;
+  const acento = Colores.normalizar(fila.color_acento) || base.acento;
   return {
-    nombre: fila.nombre && fila.nombre !== NOMBRE_POR_DEFECTO_DB ? fila.nombre : base.nombre,
-    logoUrl: elegir(fila.logo_url, base.logoUrl),
-    rtn: elegir(fila.rtn, base.rtn),
-    direccion: elegir(fila.direccion, base.direccion),
-    telefono: elegir(fila.telefono, base.telefono),
-    correo: elegir(fila.correo, base.correo),
+    nombre: texto(fila.nombre) && fila.nombre !== NOMBRE_POR_DEFECTO_DB ? texto(fila.nombre) : config.negocio.nombre,
+    logoUrl: texto(fila.logo_url) || config.negocio.logoUrl,
+    logoPropio: Boolean(texto(fila.logo_url)) && texto(fila.logo_url) !== LOGO_GENERICO,
+    rtn: texto(fila.rtn), direccion: texto(fila.direccion), telefono: texto(fila.telefono), correo: texto(fila.correo),
+    zonaHoraria: texto(fila.zona_horaria) || FABRICA.zonaHoraria,
+    moneda: texto(fila.moneda) || FABRICA.moneda,
+    formatoFecha: texto(fila.formato_fecha) || FABRICA.formatoFecha,
+    tasaImpuesto: fila.tasa_impuesto === undefined || fila.tasa_impuesto === null ? FABRICA.tasasImpuesto : Number(fila.tasa_impuesto),
+    paletaId: Catalogo.paleta(fila.paleta_id) ? fila.paleta_id : FABRICA.paleta,
+    colores: Colores.derivar(primario, acento),   // { primario, acento, acentoFuerte }
+    catalogo: Catalogo.resolver(fila),            // lo que este negocio tiene activo
+    onboardingCompletado: fila.onboarding_completado === true,
+    onboardingPaso: Number(fila.onboarding_paso) || 1,
   };
 }
 
@@ -55,7 +71,8 @@ async function fiscalPorCai(cai) {
 
 async function tasaImpuesto() {
   const fiscal = await fiscalActiva();
-  return fiscal ? Number(fiscal.tasa_impuesto) : config.valoresPorDefecto.tasasImpuesto;
+  // Con CAI manda la tasa del CAI. Sin CAI (facturación interna), la tasa por defecto que eligió el negocio.
+  return fiscal ? Number(fiscal.tasa_impuesto) : (await obtener()).tasaImpuesto;
 }
 
 // Modo de facturación: SAR (hay CAI activo) o interno (sin CAI, números INT-000001)
@@ -121,7 +138,7 @@ async function logo(url) {
 
 // Lo que hay en la base tal cual (para que el formulario muestre lo guardado)
 async function obtenerCrudo() {
-  const { rows } = await db.query('SELECT nombre, logo_url, rtn, direccion, telefono, correo FROM configuracion_negocio WHERE id = 1');
+  const { rows } = await db.query(`SELECT ${COLUMNAS_NEGOCIO} FROM configuracion_negocio WHERE id = 1`);
   return rows[0] || {};
 }
 
@@ -151,6 +168,7 @@ async function apagarFiscal() {
 // sin tocar el número en curso (así nunca se repite un número de factura). Si es otro CAI,
 // o cambió el inicio del rango, se crea uno nuevo que arranca en su primer número.
 async function guardarFiscal(d) {
+  const monedaNegocio = (await obtener()).moneda;
   return db.transaccion(async (cx) => {
     await cx.query('SELECT 1 FROM configuracion_negocio WHERE id = 1 FOR UPDATE');   // serializa cambios simultáneos
     const previa = (await cx.query('SELECT * FROM configuracion_fiscal WHERE cai = $1 ORDER BY id DESC LIMIT 1', [d.cai])).rows[0];
@@ -171,13 +189,73 @@ async function guardarFiscal(d) {
     const ins = await cx.query(
       `INSERT INTO configuracion_fiscal (cai, rango_inicio, rango_fin, numero_actual, fecha_limite, tasa_impuesto, moneda, pie_legal, activo)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE) RETURNING id`,
-      [d.cai, d.rangoInicio, d.rangoFin, d.rangoInicio - 1, d.fechaLimite, d.tasa, config.valoresPorDefecto.moneda || 'L', d.pieLegal || null]
+      [d.cai, d.rangoInicio, d.rangoFin, d.rangoInicio - 1, d.fechaLimite, d.tasa, monedaNegocio, d.pieLegal || null]
     );
     return { id: ins.rows[0].id, nuevo: true };
   });
 }
 
+// ---------- Formato regional, paleta y catálogo (Fase 6.5) ----------
+
+async function guardarRegional(d) {
+  await db.query('UPDATE configuracion_negocio SET moneda = $1, formato_fecha = $2, zona_horaria = $3, tasa_impuesto = $4 WHERE id = 1',
+    [d.moneda, d.formatoFecha, d.zonaHoraria, d.tasaImpuesto]);
+}
+
+// p viene de Catalogo.validarPaleta: los colores son los del catálogo, no los que mande el navegador
+async function guardarPaleta(p) {
+  await db.query('UPDATE configuracion_negocio SET paleta_id = $1, color_primario = $2, color_acento = $3 WHERE id = 1', [p.id, p.primario, p.acento]);
+}
+
+async function guardarCatalogo(e) {
+  await db.query(
+    `UPDATE configuracion_negocio
+        SET unidades_activas = $1::jsonb, tipos_variante_activos = $2::jsonb, opciones_variante_activas = $3::jsonb,
+            categorias_gasto_activas = $4::jsonb, tipos_ingreso_activos = $5::jsonb
+      WHERE id = 1`,
+    [JSON.stringify(e.unidades), JSON.stringify(e.tiposVariante), JSON.stringify(e.opcionesVariante), JSON.stringify(e.categoriasGasto), JSON.stringify(e.tiposIngreso)]
+  );
+}
+
+// Cuántos productos usan cada unidad (para avisar antes de desactivar una que está en uso)
+async function usoUnidades() {
+  const { rows } = await db.query('SELECT unidad, COUNT(*)::int AS n FROM productos GROUP BY unidad');
+  return Object.fromEntries(rows.map((r) => [r.unidad, r.n]));
+}
+
+async function guardarUnidades(unidades) {
+  await db.query('UPDATE configuracion_negocio SET unidades_activas = $1::jsonb WHERE id = 1', [JSON.stringify(unidades)]);
+}
+
+async function guardarMovimientos(categoriasGasto, tiposIngreso) {
+  await db.query('UPDATE configuracion_negocio SET categorias_gasto_activas = $1::jsonb, tipos_ingreso_activos = $2::jsonb WHERE id = 1',
+    [JSON.stringify(categoriasGasto), JSON.stringify(tiposIngreso)]);
+}
+
+// ---------- Asistente de configuración inicial ----------
+
+async function guardarContacto(d) {
+  await db.query('UPDATE configuracion_negocio SET rtn = $1, direccion = $2, telefono = $3, correo = $4 WHERE id = 1', [d.rtn, d.direccion, d.telefono, d.correo]);
+}
+
+async function guardarLogo(url) {
+  await db.query('UPDATE configuracion_negocio SET logo_url = $1 WHERE id = 1', [url]);
+  cacheLogo.clear();
+}
+
+// Recuerda hasta qué paso se llegó (nunca retrocede) para poder retomar el asistente
+async function avanzarOnboarding(paso) {
+  await db.query('UPDATE configuracion_negocio SET onboarding_paso = GREATEST(onboarding_paso, $1) WHERE id = 1 AND NOT onboarding_completado', [paso]);
+}
+
+async function completarOnboarding(usuarioId, ip) {
+  const { rows } = await db.query('SELECT completar_onboarding($1, $2) AS r', [usuarioId, ip || null]);
+  return rows[0].r;
+}
+
 module.exports = {
-  obtener, fiscalActiva, fiscalPorCai, tasaImpuesto, modoFacturacion, logo,
+  obtener, fiscalActiva, fiscalPorCai, tasaImpuesto, modoFacturacion, logo, LOGO_GENERICO,
   obtenerCrudo, actualizar, fiscalParaFormulario, apagarFiscal, guardarFiscal, invalidar,
+  guardarRegional, guardarPaleta, guardarCatalogo, guardarUnidades, guardarMovimientos, usoUnidades,
+  guardarContacto, guardarLogo, avanzarOnboarding, completarOnboarding,
 };

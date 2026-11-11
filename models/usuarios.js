@@ -13,7 +13,8 @@ const autenticar = (usuario, contrasena, ip) => una('SELECT autenticar_usuario($
 // cambia un permiso o desactiva a alguien, el efecto es inmediato.
 async function cargarSesion(id) {
   const { rows } = await db.query(
-    `SELECT u.id, u.nombre, u.usuario, u.activo, u.debe_cambiar_contrasena, u.sesion_version, u.rol_id, u.ultimo_acceso, u.creado_en,
+    `SELECT u.id, u.nombre, u.usuario, u.activo, u.debe_cambiar_contrasena, u.sesion_version, u.rol_id, u.ultimo_acceso, u.creado_en, u.onboarding_pendiente,
+                (SELECT NOT onboarding_completado FROM configuracion_negocio WHERE id = 1) AS onboarding_abierto,
             r.nombre AS rol, r.es_sistema AS rol_sistema, r.activo AS rol_activo,
             COALESCE(ARRAY_AGG(p.modulo || '.' || p.accion) FILTER (WHERE p.id IS NOT NULL), '{}') AS permisos
        FROM usuarios u

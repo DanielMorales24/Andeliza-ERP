@@ -40,7 +40,7 @@ document.addEventListener('alpine:init', function () {
         const etiquetas = this.d.meses.map((m) => this.nombreMes(m.mes).replace(/^./, (c) => c.toUpperCase()).slice(0, 3) + ' ' + m.mes.slice(2, 4));
         const estilo = getComputedStyle(document.documentElement);
         const primario = (estilo.getPropertyValue('--primario') || '#1e40af').trim();
-        const acento = (estilo.getPropertyValue('--acento') || '#f59e0b').trim();
+        const acento = (estilo.getPropertyValue('--acento-fuerte') || estilo.getPropertyValue('--acento') || '#f59e0b').trim();   // el acento que se ve sobre blanco
         this.grafico = new window.Chart(lienzo, {
           type: 'bar',
           data: {

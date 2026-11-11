@@ -2,6 +2,17 @@
 
 Scripts de PostgreSQL (Supabase) de Andeliza ERP. Todo está en español, en `snake_case` sin ñ ni acentos.
 
+## Dos tipos de base: desarrollo y producción
+
+Andeliza se instala **una vez por cliente** (decisión D-07): el mismo código, y una base de Supabase propia para cada instancia. Las dos bases se crean con **la misma cadena** de migraciones y funciones; lo único que cambia es el seed del final.
+
+| Base | Para qué | Seed |
+|---|---|---|
+| Desarrollo (`andeliza-dev`) | Programar y probar | `seed.sql`: tienda deportiva de ejemplo con productos, clientes, proveedores, ventas, compras y contabilidad, y cuentas `admin`, `vendedor`, `contador` y `supervisor` |
+| Producción de un cliente (`andeliza-jcl-sport`) | El negocio real | `seed-produccion.sql`: el nombre del negocio, el logo genérico, dos administradores con contraseña temporal y nueve categorías. Nada más |
+
+**Nunca se cargan los dos seeds en la misma base.** `seed-produccion.sql` no hace nada si la base ya tiene usuarios, así que no puede pisar una base de desarrollo ni una instancia en uso.
+
 ## Orden de ejecución
 
 | Orden | Archivo | Qué hace | ¿Se puede repetir? |
@@ -10,24 +21,62 @@ Scripts de PostgreSQL (Supabase) de Andeliza ERP. Todo está en español, en `sn
 | 2 | `migrations/02_migracion_fase2.sql` | Facturación interna (`tipo_documento`, prefijo y contador de comprobantes internos) | Sí |
 | 3 | `migrations/03_migracion_fase3.sql` | POS: `clave_cliente` para que un cobro repetido no duplique la venta, e índices | Sí |
 | 4 | `migrations/04_migracion_fase4.sql` | Contabilidad por partida doble, abonos, pagos y las vistas `v_cxc` y `v_cxp` | Sí |
-| 5 | `migrations/05_migracion_fase7.sql` | Roles, permisos y roles_permisos, `usuarios.rol_id`, contraseñas con bcrypt, bloqueo por intentos, versión de sesión y cambio obligatorio, recuperación de contraseña y auditoría ampliada y de solo agregar | Sí (no borra usuarios ni pisa permisos ajustados) |
-| 6 | `migrations/06_migracion_fase6.sql` | Estadísticas: el índice `idx_ventas_usuario` y 10 funciones de solo lectura (`estadisticas_*`, `zona_negocio`). No crea tablas ni toca datos ni funciones existentes | Sí. Ya trae `BEGIN` y `COMMIT` |
-| 7 | `functions.sql` | Funciones y triggers (venta, numeración, partida doble, cobros, pagos, login, usuarios, roles y permisos) | Sí: todo es `CREATE OR REPLACE` |
-| 8 | `seed.sql` | Datos de ejemplo de una tienda deportiva, con contabilidad y ventas | Solo una vez, y solo en desarrollo |
+| 5 | `migrations/05_migracion_fase7.sql` | Roles y permisos, `usuarios.rol_id`, contraseñas con bcrypt, bloqueo por intentos, versión de sesión, cambio obligatorio y recuperación | Sí |
+| 6 | `migrations/06_migracion_fase6.sql` | Estadísticas: el índice `idx_ventas_usuario` y 10 funciones de solo lectura | Sí |
+| 7 | `migrations/07_migracion_fase6.5.sql` | Preparación para producción: formato regional, paleta, elecciones del catálogo maestro y asistente inicial (14 columnas en `configuracion_negocio`, 1 en `usuarios`, 4 `CHECK` y la función `completar_onboarding`) | Sí |
+| 8 | `migrations/08_migracion_fase6.5_categorias.sql` | Categorías nuevas: las cuentas 6106 (servicios), 6107 (impuestos) y 4206 (comisiones), y `registrar_gasto` y `registrar_ingreso` validando contra el plan de cuentas | Sí |
+| 9 | `functions.sql` | Las 39 funciones y triggers: venta, numeración, partida doble, cobros, pagos, login, usuarios, roles y permisos | Sí: todo es `CREATE OR REPLACE` |
+| 10 | `seed.sql` **o** `seed-produccion.sql` | Datos de desarrollo o datos mínimos de un cliente (ver arriba) | `seed.sql` solo una vez; `seed-produccion.sql` sí (no repite nada) |
 
 Después de la cadena la base tiene **26 tablas y 2 vistas**.
 
-## Base nueva
+> **Importante para el repositorio.** Hasta la semana 6 la carpeta `migrations/` solo tenía 01 a 04 y `functions.sql` era el de la Fase 4. Con eso una instalación desde cero **no funcionaba**: `seed.sql` fallaba (`column "rol_id" of relation "usuarios" does not exist`) y la base quedaba sin usuarios, sin roles y sin función de inicio de sesión. Desde esta entrega están todas las migraciones y el `functions.sql` de la Fase 7, que es el mismo que ya corre en la base de desarrollo.
 
-Ejecuta los ocho archivos en ese orden (el último es opcional). Las migraciones 02 a 06 son seguras sobre una base nueva porque solo agregan lo que falta.
+## Instalación de una instancia nueva (producción)
+
+1. **Crea un proyecto nuevo de Supabase** para el cliente. En *SQL Editor* ejecuta, uno por uno y en orden, los archivos 1 a 9 de la tabla y al final `seed-produccion.sql` (antes, en una copia local, reemplaza el marcador `CAMBIAR_ESTA_CLAVE_ANTES_DE_EJECUTAR` por una contraseña temporal: si no, la política de contraseñas detiene el seed y no se crea ningún usuario). Cada migración trae su `BEGIN` y su `COMMIT`. El seed también: si algo falla no deja nada a medias.
+2. **El seed comprueba sus requisitos.** Se detiene con un mensaje claro si falta la migración 07 (`Falta la migración 07…`) o `functions.sql` (`Falta functions.sql…`), y avisa sin cambiar nada si la base ya tiene usuarios.
+3. **Qué queda cargado.** El negocio se llama `JCL Sport`, con el logo genérico `/img/logo.png`, zona `America/Tegucigalpa`, 30 días de crédito, la contabilidad sin iniciar, sin CAI y con "unidad" y "par" como unidades de venta. RTN, dirección, teléfono y correo quedan vacíos: los llena el administrador en el asistente. Hay dos usuarios con el rol `admin` de fábrica: `admin` (*Administrador del Sistema*, con el asistente pendiente) y `soporte` (*Administrador de Soporte*, sin él). Los dos con la contraseña temporal que pusiste en lugar del marcador y con el cambio obligatorio. Y nueve categorías: Camisetas, Pantalones, Calzado, Balones, Accesorios, Gorras, Medias, Sudaderas y Conjuntos.
+4. **Seguridad: la contraseña temporal nunca se sube al repositorio.** Se pone solo en la copia local con la que se ejecuta el seed. Entra con `soporte` y con `admin` y cámbialas **antes** de dar a conocer la dirección de la instancia.
+5. **Conecta el proyecto de Vercel** con las variables de esta base y despliega. Comprueba `/salud`.
+6. **El administrador del cliente** entra, cambia su contraseña y completa el asistente: datos, logo, colores y, si quiere, unidades de venta y su primer vendedor.
+
+Para otro cliente, copia `seed-produccion.sql`, cambia el nombre del negocio y, como siempre, pon su contraseña temporal solo en la copia local.
+
+## Base de desarrollo nueva
+
+Ejecuta los archivos 1 a 9 y después `seed.sql`. Las cuentas de ejemplo son `admin` / `admin123`, `vendedor` / `vendedor123`, `contador` / `contador123` y `supervisor` / `supervisor123`. Ninguna tiene el asistente pendiente, así que entran directo al sistema.
 
 ## Base que ya está en una fase anterior
 
-Ejecuta solo las migraciones que falten y luego `functions.sql` completo (si la base ya está en la Fase 7 y solo falta la Fase 6, basta la `06_migracion_fase6.sql`: no cambia `functions.sql`). Ejemplo: una base de la Fase 3 corre `04_migracion_fase4.sql`, la `05_migracion_fase7.sql` y después `functions.sql`.
+Ejecuta solo las migraciones que falten, en orden, y luego `functions.sql` completo. **El orden entre el SQL y el código depende de la migración.** Las aditivas (02 a 04 y 06 a 08) solo agregan tablas, columnas o funciones y el código anterior sigue funcionando con ellas: el SQL va **antes** del `git push`. La 05 es la excepción: cambia las contraseñas y quita `usuarios.rol`, así que ahí va primero el código (ver su sección).
 
-**El orden entre el SQL y el código depende de la migración.** Las de las Fases 2 a 4 solo agregan tablas y columnas, y el código anterior sigue funcionando con ellas: ahí va primero el SQL y después el código. **La 05 (Fase 7) es la excepción**, porque cambia las contraseñas a bcrypt y quita `usuarios.rol`, y el código anterior deja de funcionar. Para esa sigue la sección *Puesta en producción de la Fase 7*, más abajo: primero el código y al final el SQL.
+Al correr `functions.sql` en una base que ya tiene datos, la contabilidad se inicia sola con el estado de ese día: inventario y ventas pendientes contra capital. Caja y Bancos arrancan en cero.
 
-Al correr `functions.sql` en una base que ya tiene datos, la contabilidad se inicia sola con el estado de ese día: inventario y ventas pendientes contra capital. Caja y Bancos arrancan en cero y se cargan desde *Finanzas > Saldo inicial*.
+## Categorías nuevas de gasto e ingreso: migración 08 (base que ya tiene la 07)
+
+La `08_migracion_fase6.5_categorias.sql` agrega tres cuentas al plan de cuentas (6106 *Servicios públicos*, 6107 *Impuestos municipales, tasas y contribuciones* y 4206 *Comisiones ganadas*) y vuelve a crear `registrar_gasto` y `registrar_ingreso` sin su lista fija: ahora aceptan cualquier categoría que tenga su cuenta activa. Son las mismas definiciones que trae `functions.sql` (una prueba lo comprueba).
+
+1. **Ejecuta solo la 08 en cada base** (primero desarrollo, después la de cada cliente). Trae `BEGIN` y `COMMIT` y se puede repetir.
+2. **No vuelvas a correr `functions.sql`** en una base en uso: no hace falta, y en una base con productos y sin contabilidad iniciada (como la de un cliente que recién carga su inventario) la iniciaría por su cuenta. Se probó.
+3. **Haz `git push`.** El código nuevo ofrece *servicios* e *impuestos* en los gastos (vienen activos) y *comisiones* en los ingresos (se activa en *Configuración → Negocio* o en el asistente).
+
+- **Si el código 6106, 6107 o 4206 ya lo usa otra cuenta**, la migración se detiene con un mensaje que dice cuál, sin dejar nada a medias. No adivina otro número.
+- **El código anterior sigue funcionando** con la 08 aplicada (las funciones solo aceptan más que antes): *Instant Rollback* es seguro.
+- **Si se hace al revés** (código primero), los gastos de *servicios* e *impuestos* y los ingresos de *comisiones* dan "no es válida" hasta que se ejecute la migración; todo lo demás funciona.
+
+## Puesta en producción de la Fase 6.5 (base que ya está en la Fase 6)
+
+La `07_migracion_fase6.5.sql` **solo agrega**: 14 columnas a `configuracion_negocio` y 1 a `usuarios`, todas con valor por defecto, 4 restricciones `CHECK` y la función `completar_onboarding`. No crea tablas, no cambia datos y no toca ninguna función existente. Los valores por defecto reproducen lo que el sistema ya hacía (paleta Azul Deportivo, lempiras, día/mes/año, 15 %) y ningún usuario queda con el asistente pendiente, así que la base de desarrollo no cambia de aspecto ni de comportamiento.
+
+1. **Ejecuta la migración en cada base** (primero desarrollo, después la de cada cliente). Ya trae `BEGIN` y `COMMIT`.
+2. **Reemplaza `db/functions.sql`** por el de esta entrega y agrega `db/migrations/05`, `06` y `07`. En una base que ya está en la Fase 7 **no hace falta volver a correr `functions.sql`**: es el mismo que ya se ejecutó; el cambio es para que el repositorio pueda instalar una base desde cero.
+3. **Haz `git push`.** Si los dos proyectos de Vercel siguen la misma rama, la migración tiene que estar ya en las dos bases.
+4. **Verifica.** `/salud` responde `ok`. Entra como administrador: todo se ve igual que antes y *Configuración → Negocio* muestra las tarjetas nuevas (*Colores del negocio*, *Moneda, fechas e impuesto* y *Catálogo del negocio*).
+
+- **Si se hace al revés** (código primero), se probó: la pantalla de acceso abre y el inicio de sesión funciona, pero el panel y el resto de las pantallas dan error 500 (`column "moneda" does not exist`) hasta que se ejecute la migración. Ejecutarla lo resuelve sin tocar nada más.
+- **Si la migración falla**, no queda nada a medias. Corrige la causa y vuelve a ejecutarla.
+- **Instant Rollback** en Vercel es seguro: el código anterior ignora las columnas nuevas.
 
 ## Puesta en producción de la Fase 6 (base que ya está en la Fase 7)
 
@@ -75,7 +124,11 @@ La migración 05 **no borra a ningún usuario**: cada uno conserva su id, nombre
 
 ## Cómo se verificó
 
-La cadena `01 → 05 + functions.sql` se comparó contra el esquema completo vigente: columnas, restricciones, índices, funciones, triggers y vistas son idénticos. Con `seed.sql` cargado, la base cumple que cada partida cuadra, que Activo = Pasivo + Patrimonio + Resultado y que cuentas por cobrar y por pagar coinciden con el detalle de documentos pendientes.
+**Migración 08.** La cadena `01 → 08 → functions.sql → seed-produccion.sql` se instaló desde cero y se recorrió por HTTP: un gasto de servicios pagado, uno de impuestos por pagar y un ingreso de comisiones, con sus partidas, el libro diario, la balanza y el estado de resultados en PDF, y sus tres anulaciones con la contrapartida exacta. La 08 se repitió dos veces sin cambios, se aplicó sola sobre una base en uso con datos, se probó el choque de códigos y se comprobó que en una base con productos y sin contabilidad no la inicia.
+
+**Fase 6.5.** La cadena completa `01 → 07 → functions.sql → seed-produccion.sql` se ejecutó sobre una base vacía y se recorrió entera por HTTP (97 comprobaciones) y en un navegador real (29): primer acceso con la contraseña temporal, cambio obligatorio, asistente completo, bloqueo de las 13 pantallas mientras está pendiente, panel vacío pero funcional y la paleta aplicada en pantallas y PDF. La migración 07 y `functions.sql` se repitieron sobre la misma base sin errores, el seed de producción se repitió sin cambiar ni un hash, y sobre una base de desarrollo no hizo nada. La cadena con `seed.sql` dejó la base de desarrollo con sus datos y sin nadie con el asistente pendiente.
+
+**Fases anteriores.** La cadena `01 → 05 + functions.sql` se comparó contra el esquema completo vigente: columnas, restricciones, índices, funciones, triggers y vistas son idénticos. Con `seed.sql` cargado, la base cumple que cada partida cuadra, que Activo = Pasivo + Patrimonio + Resultado y que cuentas por cobrar y por pagar coinciden con el detalle de documentos pendientes.
 
 ## Carpeta `sql/` anterior
 

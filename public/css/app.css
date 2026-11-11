@@ -1,7 +1,8 @@
 [x-cloak] { display: none !important; }
 
 /* Foco visible para quien navega con teclado */
-:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+/* El anillo de foco usa el acento fuerte: el mismo tono del acento, pero visible sobre fondos claros (3:1) */
+:focus-visible { outline: 2px solid var(--acento-fuerte, var(--acento)); outline-offset: 2px; }
 
 /* Evita que iOS haga zoom al tocar un campo */
 input, select, textarea { font-size: 16px; }

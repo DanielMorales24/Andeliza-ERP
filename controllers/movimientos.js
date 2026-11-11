@@ -4,8 +4,11 @@ const V = require('../utils/validar');
 const Contab = require('../models/contabilidad');
 const Mov = require('../models/movimientos');
 
-const TIPOS_INGRESO = [['intereses', 'Intereses'], ['alquileres', 'Alquileres'], ['servicios', 'Servicios'], ['inversiones', 'Inversiones'], ['otros', 'Otros']];
-const CATEGORIAS_GASTO = [['logistica', 'Logística'], ['marketing', 'Marketing'], ['operativos', 'Operativos'], ['mantenimiento', 'Mantenimiento'], ['otros', 'Otros']];
+const Catalogo = require('../utils/catalogo');
+
+// Los tipos de ingreso y las categorías de gasto que este negocio tiene activos (del catálogo maestro)
+const tiposIngreso = (res) => Catalogo.pares('tiposIngreso', res.locals.negocioActual.catalogo.tiposIngreso);
+const categoriasGasto = (res) => Catalogo.pares('categoriasGasto', res.locals.negocioActual.catalogo.categoriasGasto);
 
 async function pagina(req, res, next) {
   try {
@@ -21,7 +24,7 @@ async function pagina(req, res, next) {
       titulo: 'Movimientos', seccion: 'movimientos',
       datos: {
         estado: est, inicioMes, listas: { ingresos, gastos, compras }, catalogos: cat,
-        tiposIngreso: TIPOS_INGRESO, categoriasGasto: CATEGORIAS_GASTO, compras: config.funcionalidades.compras === true,
+        tiposIngreso: tiposIngreso(res), categoriasGasto: categoriasGasto(res), compras: config.funcionalidades.compras === true,
       },
     });
   } catch (err) { next(err); }
@@ -57,7 +60,7 @@ async function crearIngreso(req, res, next) {
     const b = req.body || {};
     const c = await comunes(b, 'monto', 'entra a');
     const r = await Mov.registrarIngreso({
-      tipo: V.eleccion(b.tipo, 'El tipo de ingreso', TIPOS_INGRESO.map((t) => t[0]), 'otros'),
+      tipo: V.eleccion(b.tipo, 'El tipo de ingreso', tiposIngreso(res).map((t) => t[0]), tiposIngreso(res)[0][0]),
       descripcion: V.requerido(b.descripcion, 'La descripción', 255),
       monto: V.dinero(b.monto, 'El monto'), clienteId: V.idOpcional(b.cliente_id, 'El cliente'), usuarioId: req.user.id, ...c,
     });
@@ -70,7 +73,7 @@ async function crearGasto(req, res, next) {
     const b = req.body || {};
     const c = await comunes(b, 'monto', 'sale de');
     const r = await Mov.registrarGasto({
-      categoria: V.eleccion(b.categoria, 'La categoría', CATEGORIAS_GASTO.map((t) => t[0]), 'otros'),
+      categoria: V.eleccion(b.categoria, 'La categoría', categoriasGasto(res).map((t) => t[0]), categoriasGasto(res)[0][0]),
       descripcion: V.requerido(b.descripcion, 'La descripción', 255),
       monto: V.dinero(b.monto, 'El monto'), proveedorId: V.idOpcional(b.proveedor_id, 'El proveedor'), usuarioId: req.user.id, ...c,
     });

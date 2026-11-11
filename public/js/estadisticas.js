@@ -110,7 +110,7 @@ document.addEventListener('alpine:init', function () {
       crear(id, config) { const el = document.getElementById(id); if (el) this.graficos[id] = new window.Chart(el, config); },
       colores() {
         const est = getComputedStyle(document.documentElement);
-        const primario = (est.getPropertyValue('--primario') || '#1e40af').trim(); const acento = (est.getPropertyValue('--acento') || '#f59e0b').trim();
+        const primario = (est.getPropertyValue('--primario') || '#1e40af').trim(); const acento = (est.getPropertyValue('--acento-fuerte') || est.getPropertyValue('--acento') || '#f59e0b').trim();   // en gráficos, el acento que se ve sobre blanco
         return { primario: primario, acento: acento, paleta: [primario, acento, '#0e7490', '#7c3aed', '#be185d', '#9ca3af'] };
       },
       conAlfa(color, alfa) { return /^#[0-9a-f]{6}$/i.test(color) ? color + alfa : color; },

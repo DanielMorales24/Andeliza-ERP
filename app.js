@@ -64,7 +64,7 @@ app.get('/salud', async (req, res) => {
     if (req.query.pdf === '1') {
       try {
         const buffer = await require('./services/pdfService').generar({
-          tipo: 'interno', negocio: { nombre: 'Prueba' }, logo: null, color: config.negocio.colores.primario, fecha: new Date(),
+          tipo: 'interno', negocio: { nombre: 'Prueba' }, logo: null, color: config.catalogo.paletas[0].primario, fecha: new Date(),
           tasaPct: 0, numero: 'PRUEBA', estado: 'C', cliente: null, items: [], subtotal: 0, impuesto: 0, total: 0,
         });
         respuesta.pdf = `ok (${buffer.length} bytes)`;
@@ -81,7 +81,11 @@ app.get('/salud', async (req, res) => {
   }
 });
 
+// El negocio de esta instancia (nombre, logo, colores, catálogo activo) disponible en todas las vistas, con sesión o sin ella
+app.use(require('./middlewares/negocio'));
+
 app.use('/', require('./routes/auth'));
+app.use('/onboarding', require('./routes/onboarding'));         // asistente de configuración inicial (Fase 6.5)
 app.use('/', require('./routes/dashboard'));
 app.use('/finanzas', require('./routes/finanzas'));
 app.use('/pos', require('./routes/pos'));

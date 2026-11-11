@@ -5,22 +5,22 @@ const Categorias = require('../models/categorias');
 const Proveedores = require('../models/proveedores');
 const Storage = require('../services/storageService');
 
-const { unidades, tiposVariante } = config.valoresPorDefecto;
+const Catalogo = require('../utils/catalogo');
 const { variantes: usaVariantes, productosCompuestos: usaKits } = config.funcionalidades;
 
-// Para cada tipo de variante (talla, equipo...) las opciones vienen de client.config.js:
-// tipo "talla" -> valoresPorDefecto.tallas, tipo "equipo" -> valoresPorDefecto.equipos
-function opcionesVariante() {
-  const salida = {};
-  for (const tipo of tiposVariante) {
-    salida[tipo] = config.valoresPorDefecto[`${tipo}s`] || config.valoresPorDefecto[`${tipo}es`] || [];
-  }
-  return salida;
+// Lo que este negocio tiene activo del catálogo maestro (se carga en cada petición)
+const activo = (res) => res.locals.negocioActual.catalogo;
+
+// Los tipos de variante de un producto: los activos y, además, los que sus variantes ya usan aunque
+// hoy estén desactivados. Así un producto existente no pierde nada al editarlo.
+function tiposDe(cat, variantes) {
+  const usados = [...new Set((variantes || []).flatMap((v) => Object.keys(v.atributos || {})))];
+  return [...cat.tiposVariante, ...usados.filter((t) => !cat.tiposVariante.includes(t))];
 }
 
-const productoVacio = () => ({
+const productoVacio = (cat) => ({
   id: null, sku: '', nombre: '', categoria_id: '', proveedor_id: '',
-  precio_compra: 0, precio_venta: 0, unidad: unidades[0], stock: 0, stock_minimo: 0,
+  precio_compra: 0, precio_venta: 0, unidad: cat.unidades[0], stock: 0, stock_minimo: 0,
   descripcion: '', imagen_url: null, es_compuesto: false, activo: true,
 });
 
@@ -36,7 +36,8 @@ async function index(req, res, next) {
 async function formulario(req, res, next) {
   try {
     const id = req.params.id ? Number(req.params.id) : null;
-    let producto = productoVacio();
+    const cat = activo(res);
+    let producto = productoVacio(cat);
     let variantes = [];
     let componentes = [];
 
@@ -57,6 +58,7 @@ async function formulario(req, res, next) {
       .filter((x) => x.activo || x.id === actual)
       .map((x) => ({ id: x.id, nombre: x.nombre }));
 
+    const tipos = tiposDe(cat, variantes);
     const datos = {
       id,
       producto,
@@ -65,9 +67,13 @@ async function formulario(req, res, next) {
       candidatosKit,
       categorias: ofrecer(categorias, producto.categoria_id),
       proveedores: ofrecer(proveedores, producto.proveedor_id),
-      unidades: unidades.includes(producto.unidad) ? unidades : [...unidades, producto.unidad],
-      tiposVariante,
-      opcionesVariante: opcionesVariante(),
+      // Solo las activas. Si este producto tenía una que hoy está desactivada, se ofrece marcada "(inactiva)"
+      unidades: Catalogo.unidadesParaFormulario(cat.unidades, producto.unidad),
+      tiposVariante: tipos,
+      tiposInactivos: tipos.filter((t) => !cat.tiposVariante.includes(t)),
+      nombresTipos: Object.fromEntries(tipos.map((t) => [t, Catalogo.nombreDe('tiposVariante', t)])),
+      opcionesVariante: Object.fromEntries(tipos.map((t) => [t, cat.tiposVariante.includes(t) ? (cat.opcionesVariante[t] || []) : []])),
+      opcionesMaestras: Object.fromEntries(tipos.map((t) => [t, Catalogo.opcionesMaestras(t)])),
       funcionalidades: { variantes: usaVariantes, kits: usaKits },
     };
 
@@ -80,7 +86,7 @@ async function formulario(req, res, next) {
 // "ALG" para valores largos ("Local" -> "LOC"), tal cual para los cortos ("XL")
 const abreviar = (valor) => (valor.length <= 3 ? valor : valor.slice(0, 3)).toUpperCase().replace(/\s+/g, '');
 
-function normalizarVariantes(crudo, skuProducto) {
+function normalizarVariantes(crudo, skuProducto, tiposVariante) {
   if (!Array.isArray(crudo)) throw new V.ErrorValidacion('Las variantes no tienen un formato válido.');
   if (crudo.length > 300) throw new V.ErrorValidacion('Un producto no puede tener más de 300 variantes.');
 
@@ -141,9 +147,14 @@ async function guardar(req, res, next) {
       if (!actual) return res.status(404).json({ error: 'El producto ya no existe.' });
     }
 
+    // Se puede elegir una unidad activa. Una desactivada solo vale si es la que el producto ya tenía.
+    const cat = activo(res);
+    const unidades = cat.unidades;
     const unidad = V.texto(b.unidad) || unidades[0];
     if (!unidades.includes(unidad) && !(actual && actual.unidad === unidad)) {
-      throw new V.ErrorValidacion('La unidad no es válida.');
+      throw new V.ErrorValidacion(Catalogo.unidad(unidad)
+        ? `La unidad "${Catalogo.nombreUnidad(unidad)}" está desactivada. Actívala en Configuración o elige otra.`
+        : 'La unidad no es válida.');
     }
 
     const datos = {
@@ -161,7 +172,8 @@ async function guardar(req, res, next) {
       activo: V.booleano(b.activo, true),
     };
 
-    let variantes = usaVariantes ? normalizarVariantes(V.json(b.variantes, 'Las variantes'), datos.sku) : [];
+    const previas = usaVariantes && id ? ((await Productos.obtener(id)) || { variantes: [] }).variantes : [];
+    let variantes = usaVariantes ? normalizarVariantes(V.json(b.variantes, 'Las variantes'), datos.sku, tiposDe(cat, previas)) : [];
     if (datos.es_compuesto && variantes.length) {
       throw new V.ErrorValidacion('Un producto no puede tener variantes y ser un kit a la vez.');
     }

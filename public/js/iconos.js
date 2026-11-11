@@ -28,6 +28,13 @@
     equal: '<path d="M5 9h14M5 15h14"/>',
     check: '<circle cx="12" cy="12" r="9"/><path d="m8 12.5 3 3 5-6"/>',
     id: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.6-1.6 1.8-2.3 3-2.3s2.4.7 3 2.3M15 10h3M15 13h3"/>',
+    eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    'eye-off': '<path d="M3 3l18 18"/><path d="M10.5 5.1c.5-.1 1-.1 1.5-.1 6.4 0 10 7 10 7a16 16 0 0 1-3 3.900M6.4 6.500C3.6 8.4 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.500 4.5-1.2"/><path d="M9.9 9.900a3 3 0 0 0 4.2 4.2"/>',
+    palette: '<circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16" cy="10" r="1"/><path d="M14 15.5a2 2 0 1 0 4 0"/>',
+    image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="m21 16-5-5-8 8"/>',
+    store: '<path d="M4 9l1.5-5h13L20 9"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/>',
+    ruler: '<rect x="3" y="8" width="18" height="8" rx="1.5"/><path d="M7 8v3M11 8v4M15 8v3"/>',
+    'user-plus': '<circle cx="10" cy="8" r="4"/><path d="M2.5 21c0-4.2 3.4-7 7.5-7 1.5 0 2.9.400 4.1 1"/><path d="M18 14v6M15 17h6"/>',
   };
   function icono(nombre, clase) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="'

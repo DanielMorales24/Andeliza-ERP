@@ -33,12 +33,25 @@ async function cargarPermisos(req, res, next) {
 
     req.user = usuario;
     res.locals.usuarioActual = usuario;
-    res.locals.negocioActual = await Negocio.obtener();
+    if (!res.locals.negocioActual) res.locals.negocioActual = await Negocio.obtener();   // normalmente ya lo cargó middlewares/negocio.js
 
     if (usuario.debeCambiar && !LIBRES_SI_DEBE_CAMBIAR.includes(req.originalUrl.split('?')[0])) {
       return pideJSON(req)
         ? res.status(403).json({ error: 'Debes cambiar tu contraseña antes de continuar.', cambiarContrasena: true })
         : res.redirect('/cambiar-contrasena');
+    }
+
+    // Asistente de configuración inicial (decisión D-09): mientras el negocio no esté configurado, la persona
+    // a quien le toca solo puede usar el asistente o salir. Va después del cambio de contraseña obligatorio.
+    // Solo aplica cuando la contraseña ya no es provisional: primero se cambia la contraseña y después se configura.
+    if (usuario.debeOnboarding && !usuario.debeCambiar) {
+      const ruta = req.originalUrl.split('?')[0];
+      const libre = ruta === '/logout' || ruta === '/onboarding' || ruta.startsWith('/onboarding/');
+      if (!libre) {
+        return pideJSON(req)
+          ? res.status(403).json({ error: 'Primero completa la configuración inicial del negocio.', onboarding: true })
+          : res.redirect('/onboarding');
+      }
     }
     next();
   } catch (err) {

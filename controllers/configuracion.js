@@ -12,6 +12,7 @@ const Usuarios = require('../models/usuarios');
 const Roles = require('../models/roles');
 const Auditoria = require('../models/auditoria');
 const Storage = require('../services/storageService');
+const Catalogo = require('../utils/catalogo');
 const { ACCIONES } = require('../utils/permisos');
 const { hoyISO, fechaHora } = require('../utils/formato');
 
@@ -33,12 +34,18 @@ const formatoFiscal = (f) => (f ? {
 } : null);
 
 const negocio = aprobar(async (req, res) => {
-  const [efectivo, crudo, fiscal, modo] = await Promise.all([Negocio.obtener(), Negocio.obtenerCrudo(), Negocio.fiscalParaFormulario(), Negocio.modoFacturacion()]);
+  const [efectivo, fiscal, modo, usoUnidades] = await Promise.all([Negocio.obtener(), Negocio.fiscalParaFormulario(), Negocio.modoFacturacion(), Negocio.usoUnidades()]);
   const datos = {
-    negocio: { nombre: efectivo.nombre, rtn: efectivo.rtn, direccion: efectivo.direccion, telefono: efectivo.telefono, correo: efectivo.correo, logoUrl: efectivo.logoUrl, logoPropio: Boolean(crudo.logo_url) },
+    negocio: { nombre: efectivo.nombre, rtn: efectivo.rtn, direccion: efectivo.direccion, telefono: efectivo.telefono, correo: efectivo.correo, logoUrl: efectivo.logoUrl, logoPropio: efectivo.logoPropio },
     fiscal: formatoFiscal(fiscal),
     modo,
-    tasaPorDefecto: Math.round(config.valoresPorDefecto.tasasImpuesto * 10000) / 100,
+    tasaPorDefecto: Math.round(efectivo.tasaImpuesto * 10000) / 100,
+    // Fase 6.5: lo que EXISTE (catálogo maestro) y lo que este negocio ELIGIÓ
+    maestro: Catalogo.paraVista(),
+    catalogo: efectivo.catalogo,
+    paletaId: efectivo.paletaId,
+    regional: { moneda: efectivo.moneda, formatoFecha: efectivo.formatoFecha, zonaHoraria: efectivo.zonaHoraria, tasaImpuesto: Math.round(efectivo.tasaImpuesto * 10000) / 100 },
+    usoUnidades,
     hoy: hoyISO(),
   };
   res.render('configuracion/negocio', { titulo: 'Configuración', seccion: 'negocio', datos });
@@ -70,7 +77,42 @@ const guardarNegocio = aprobar(async (req, res) => {
     descripcion: `Actualizó los datos del negocio${req.file ? ' y cambió el logo' : ''}${!req.file && anterior && !logoUrl ? ' y quitó el logo' : ''}`, ip: req.ip,
   });
   const efectivo = await Negocio.obtener();
-  res.json({ ok: true, negocio: { ...efectivo, logoPropio: Boolean(logoUrl) } });
+  const { nombre, logoUrl: logo, rtn, direccion, telefono, correo, logoPropio } = efectivo;
+  res.json({ ok: true, negocio: { nombre, logoUrl: logo, rtn, direccion, telefono, correo, logoPropio } });
+});
+
+// ---------- Fase 6.5: paleta, formato regional y catálogo del negocio ----------
+// En los tres casos solo se aceptan valores que existan en el catálogo maestro (client.config.js).
+
+const guardarPaleta = aprobar(async (req, res) => {
+  const paleta = Catalogo.validarPaleta(req.body.paleta_id);   // los colores salen del catálogo, no del navegador
+  await Negocio.guardarPaleta(paleta);
+  await Auditoria.registrar({
+    usuarioId: req.user.id, accion: 'actualizar_paleta', entidad: 'configuracion_negocio', entidadId: 1,
+    descripcion: `Cambió la paleta de colores a ${paleta.nombre}`, ip: req.ip,
+  });
+  res.json({ ok: true, paleta, colores: (await Negocio.obtener()).colores });
+});
+
+const guardarRegional = aprobar(async (req, res) => {
+  const d = Catalogo.validarRegional(req.body);
+  await Negocio.guardarRegional(d);
+  await Auditoria.registrar({
+    usuarioId: req.user.id, accion: 'actualizar_regional', entidad: 'configuracion_negocio', entidadId: 1,
+    descripcion: `Cambió el formato regional: moneda ${d.moneda}, fecha ${d.formatoFecha}, zona ${d.zonaHoraria}, impuesto por defecto ${Math.round(d.tasaImpuesto * 10000) / 100} %`, ip: req.ip,
+  });
+  res.json({ ok: true, regional: d });
+});
+
+const guardarCatalogo = aprobar(async (req, res) => {
+  const e = Catalogo.validarEleccion(req.body);
+  await Negocio.guardarCatalogo(e);
+  await Auditoria.registrar({
+    usuarioId: req.user.id, accion: 'actualizar_catalogo', entidad: 'configuracion_negocio', entidadId: 1,
+    descripcion: `Cambió el catálogo del negocio: unidades ${e.unidades.join(', ')}; variantes ${e.tiposVariante.join(', ') || 'ninguna'}`,
+    detalles: e, ip: req.ip,
+  });
+  res.json({ ok: true, catalogo: (await Negocio.obtener()).catalogo });
 });
 
 // El interruptor del SAR: encendido = se factura con CAI; apagado = comprobantes internos
@@ -95,7 +137,7 @@ const guardarFacturacion = aprobar(async (req, res) => {
   const fechaLimite = V.fechaISO(req.body.fecha_limite, 'La fecha límite');
   if (!fechaLimite) throw new V.ErrorValidacion('La fecha límite de emisión es obligatoria.');
   if (fechaLimite < hoyISO()) throw new V.ErrorValidacion('La fecha límite del CAI ya venció: no se puede activar un CAI vencido.');
-  const tasaPct = V.numero(req.body.tasa, 'La tasa de impuesto', { min: 0, max: 100, defecto: config.valoresPorDefecto.tasasImpuesto * 100 });
+  const tasaPct = V.numero(req.body.tasa, 'La tasa de impuesto', { min: 0, max: 100, defecto: res.locals.negocioActual.tasaImpuesto * 100 });
   const pieLegal = V.opcional(req.body.pie_legal, 'El pie legal', 500);
 
   const r = await Negocio.guardarFiscal({ cai, rangoInicio, rangoFin, fechaLimite, tasa: Math.round(tasaPct * 100) / 10000, pieLegal });
@@ -222,6 +264,7 @@ const auditoriaDatos = aprobar(async (req, res) => {
 });
 
 module.exports = {
+  guardarPaleta, guardarRegional, guardarCatalogo,
   negocio, guardarNegocio, guardarFacturacion,
   usuarios, usuariosDatos, crearUsuario, actualizarUsuario, cambiarEstadoUsuario, generarCodigo,
   roles, rolesDatos, crearRol, actualizarRol, eliminarRol, permisosRol, guardarPermisosRol,

@@ -1,6 +1,12 @@
+<%
+  // Marca del negocio: la paleta que eligió (configuracion_negocio). Los tres colores ya vienen validados como #RRGGBB.
+  const _n = typeof negocioActual !== 'undefined' && negocioActual ? negocioActual : null;
+  const _marca = _n && _n.colores ? _n.colores : { primario: '#1E40AF', acento: '#F59E0B', acentoFuerte: '#CA8208' };
+  const _nombreNegocio = _n && _n.nombre ? _n.nombre : config.negocio.nombre;
+%>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title><%= titulo ? titulo + ' | ' : '' %><%= config.negocio.nombre %></title>
+<title><%= titulo ? titulo + ' | ' : '' %><%= _nombreNegocio %></title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -8,13 +14,14 @@
 
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
-  // Colores del cliente (client.config.js) disponibles como bg-primario, text-acento, etc.
+  // Colores del negocio disponibles como bg-primario, text-acento, bg-acentofuerte, etc.
   tailwind.config = {
     theme: {
       extend: {
         colors: {
-          primario: '<%= config.negocio.colores.primario %>',
-          acento: '<%= config.negocio.colores.acento %>',
+          primario: '<%= _marca.primario %>',
+          acento: '<%= _marca.acento %>',
+          acentofuerte: '<%= _marca.acentoFuerte %>',
           fondo: '#f4f5f7',
           tinta: '#1f2430',
           borde: '#dfe2e8',
@@ -27,7 +34,7 @@
     },
   };
 </script>
-<style>:root { --primario: <%= config.negocio.colores.primario %>; --acento: <%= config.negocio.colores.acento %>; --tinta: #1f2430; --borde: #dfe2e8; --fondo: #f4f5f7; }</style>
+<style>:root { --primario: <%= _marca.primario %>; --acento: <%= _marca.acento %>; --acento-fuerte: <%= _marca.acentoFuerte %>; --color-primario: <%= _marca.primario %>; --color-acento: <%= _marca.acento %>; --tinta: #1f2430; --borde: #dfe2e8; --fondo: #f4f5f7; }</style>
 <link rel="stylesheet" href="/css/app.css">
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <%- style %>

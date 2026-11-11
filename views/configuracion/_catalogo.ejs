@@ -1,0 +1,149 @@
+<%# Fase 6.5: lo que este negocio elige del catálogo maestro. Tres tarjetas con su propio botón de guardar. %>
+<div x-data="configCatalogo" class="mt-6 grid gap-6 xl:grid-cols-2">
+
+  <!-- Colores -->
+  <form @submit.prevent="guardarPaleta()" class="rounded-lg border border-borde bg-white p-5" aria-labelledby="t-paleta">
+    <h2 id="t-paleta" class="font-titulo text-xl font-semibold">Colores del negocio</h2>
+    <p class="mt-1 text-sm text-gray-600">Elige una paleta. Todas están comprobadas: el texto blanco se lee sobre el color principal y el acento se distingue.</p>
+    <div x-show="errP" x-cloak role="alert" class="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="errP"></div>
+
+    <div class="mt-4 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Paletas de colores">
+      <template x-for="p in d.maestro.paletas" :key="p.id">
+        <label class="block cursor-pointer overflow-hidden rounded-lg border-2 transition" :class="paleta === p.id ? 'border-gray-900 shadow' : 'border-borde hover:border-gray-400'" :data-paleta="p.id">
+          <input type="radio" name="paleta" class="sr-only" :value="p.id" x-model="paleta">
+          <div class="flex h-8" aria-hidden="true"><span class="flex-1" :style="'background:' + p.primario"></span><span class="w-1/4" :style="'background:' + p.acento"></span></div>
+          <div class="flex items-center justify-between gap-2 px-3 py-2">
+            <span class="text-sm font-medium" x-text="p.nombre"></span>
+            <span class="text-xs text-gray-500" :title="'Contraste del texto blanco sobre el color principal'" x-text="p.medidas.textoBlanco + ':1'"></span>
+          </div>
+        </label>
+      </template>
+    </div>
+
+    <div class="mt-4 overflow-hidden rounded-lg border border-borde" x-show="paletaActual" data-vista-paleta>
+      <div class="flex items-center gap-3 px-4 py-2.5 text-white" :style="paletaActual ? 'background:' + paletaActual.primario : ''">
+        <span class="font-titulo text-lg font-semibold" x-text="d.negocio.nombre"></span>
+        <span class="ml-auto border-l-4 pl-2 text-sm" :style="paletaActual ? 'border-color:' + paletaActual.acento : ''">Menú</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 px-4 py-3">
+        <span class="rounded px-3 py-1.5 text-sm font-semibold text-white" :style="paletaActual ? 'background:' + paletaActual.primario : ''">Botón</span>
+        <span class="text-sm font-semibold underline" :style="paletaActual ? 'color:' + paletaActual.primario : ''">Enlace</span>
+        <span class="rounded-full px-2.5 py-0.5 text-xs font-medium" :style="paletaActual ? 'background:' + paletaActual.acento + ';color:#1f2430' : ''">Etiqueta</span>
+        <span class="flex h-8 items-end gap-1" aria-hidden="true">
+          <span class="w-3 rounded-t" :style="paletaActual ? 'height:60%;background:' + paletaActual.primario : ''"></span>
+          <span class="w-3 rounded-t" :style="paletaActual ? 'height:100%;background:' + paletaActual.acentoFuerte : ''"></span>
+        </span>
+      </div>
+    </div>
+    <div class="mt-5 flex items-center justify-end gap-3">
+      <span class="text-xs text-gray-500" x-show="paleta !== paletaGuardada">Sin guardar</span>
+      <button type="submit" class="btn btn-primario h-11 px-6" data-guardar-paleta :disabled="guardandoP || paleta === paletaGuardada" x-text="guardandoP ? 'Guardando…' : 'Guardar colores'"></button>
+    </div>
+  </form>
+
+  <!-- Formato regional -->
+  <form @submit.prevent="guardarRegional()" class="rounded-lg border border-borde bg-white p-5" aria-labelledby="t-regional">
+    <h2 id="t-regional" class="font-titulo text-xl font-semibold">Moneda, fechas e impuesto</h2>
+    <p class="mt-1 text-sm text-gray-600">Cómo se muestran los montos y las fechas en todo el sistema.</p>
+    <div x-show="errR" x-cloak role="alert" class="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="errR"></div>
+    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+      <div>
+        <label for="r-moneda" class="etiqueta">Moneda</label>
+        <select id="r-moneda" class="campo" x-model="r.moneda"><template x-for="m in d.maestro.monedas" :key="m.clave"><option :value="m.clave" x-text="m.nombre" :selected="m.clave === r.moneda"></option></template></select>
+      </div>
+      <div>
+        <label for="r-fecha" class="etiqueta">Formato de fecha</label>
+        <select id="r-fecha" class="campo" x-model="r.formatoFecha"><template x-for="f in d.maestro.formatosFecha" :key="f.clave"><option :value="f.clave" x-text="f.nombre" :selected="f.clave === r.formatoFecha"></option></template></select>
+      </div>
+      <div>
+        <label for="r-zona" class="etiqueta">Zona horaria</label>
+        <select id="r-zona" class="campo" x-model="r.zonaHoraria"><template x-for="z in d.maestro.zonasHorarias" :key="z.clave"><option :value="z.clave" x-text="z.nombre" :selected="z.clave === r.zonaHoraria"></option></template></select>
+      </div>
+      <div>
+        <label for="r-tasa" class="etiqueta">Impuesto por defecto</label>
+        <select id="r-tasa" class="campo" x-model.number="r.tasaImpuesto"><template x-for="t in d.maestro.tasasImpuesto" :key="t.valor"><option :value="t.valor" x-text="t.nombre" :selected="t.valor === Number(r.tasaImpuesto)"></option></template></select>
+        <p class="mt-1 text-xs text-gray-500">Se aplica a las ventas con comprobante interno. Si facturas con CAI, manda la tasa del CAI.</p>
+      </div>
+    </div>
+    <div class="mt-5 flex justify-end">
+      <button type="submit" class="btn btn-primario h-11 px-6" data-guardar-regional :disabled="guardandoR" x-text="guardandoR ? 'Guardando…' : 'Guardar formato'"></button>
+    </div>
+  </form>
+
+  <!-- Catálogo del negocio -->
+  <form @submit.prevent="guardarCatalogo()" class="rounded-lg border border-borde bg-white p-5 xl:col-span-2" aria-labelledby="t-catalogo">
+    <h2 id="t-catalogo" class="font-titulo text-xl font-semibold">Catálogo del negocio</h2>
+    <p class="mt-1 text-sm text-gray-600">Activa solo lo que tu negocio usa. Lo desactivado deja de ofrecerse en los formularios, pero lo que ya está registrado se conserva.</p>
+    <div x-show="errC" x-cloak role="alert" class="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="errC"></div>
+
+    <fieldset class="mt-5">
+      <legend class="text-sm font-semibold">Unidades de venta <span class="font-normal text-gray-500" x-text="'(' + c.unidades.length + ' activas)'"></span></legend>
+      <div class="mt-2 flex flex-wrap gap-1.5">
+        <template x-for="u in d.maestro.unidades" :key="u.clave">
+          <button type="button" class="rounded-full border px-3 py-1.5 text-sm transition" :data-unidad="u.clave" :aria-pressed="tiene('unidades', u.clave) ? 'true' : 'false'" @click="alternar('unidades', u.clave)"
+                  :class="tiene('unidades', u.clave) ? 'border-primario bg-primario text-white' : 'border-borde bg-white hover:bg-fondo'">
+            <span x-text="u.nombre"></span><span x-show="u.decimal" class="opacity-75"> · fracciones</span>
+          </button>
+        </template>
+      </div>
+      <p class="mt-2 text-xs text-amber-800" x-show="enUsoApagadas.length" x-cloak data-aviso-unidades
+         x-text="'Hay productos que usan ' + enUsoApagadas.join(', ') + ': la conservan. Solo deja de ofrecerse para productos nuevos.'"></p>
+    </fieldset>
+
+    <fieldset class="mt-6">
+      <legend class="text-sm font-semibold">Variantes de producto</legend>
+      <p class="text-xs text-gray-500">En qué se diferencian las variantes de un mismo producto, y qué opciones se sugieren al crearlas.</p>
+      <div class="mt-2 divide-y divide-borde rounded-lg border border-borde">
+        <template x-for="t in d.maestro.tiposVariante" :key="t.clave">
+          <div class="p-3" :data-tipo="t.clave">
+            <label class="flex cursor-pointer items-center gap-3">
+              <input type="checkbox" class="interruptor" :checked="tiene('tiposVariante', t.clave)" @change="alternar('tiposVariante', t.clave)">
+              <span class="font-medium" x-text="t.nombre"></span>
+              <span class="text-xs text-gray-500" x-show="tiene('tiposVariante', t.clave)" x-text="(c.opcionesVariante[t.clave] || []).length + ' opciones sugeridas'"></span>
+            </label>
+            <div x-show="tiene('tiposVariante', t.clave)" class="mt-2 space-y-2 pl-1">
+              <template x-for="g in t.grupos" :key="g.nombre">
+                <div>
+                  <p class="text-xs text-gray-600"><span x-text="g.nombre"></span>
+                    <button type="button" class="btn-texto" @click="marcarGrupo(t.clave, g.valores, true)">todas</button>
+                    <button type="button" class="btn-texto" @click="marcarGrupo(t.clave, g.valores, false)">ninguna</button></p>
+                  <div class="mt-1 flex flex-wrap gap-1">
+                    <template x-for="op in g.valores" :key="op">
+                      <button type="button" class="rounded border px-2 py-1 text-xs transition" :aria-pressed="tieneOpcion(t.clave, op) ? 'true' : 'false'" @click="alternarOpcion(t.clave, op)"
+                              :class="tieneOpcion(t.clave, op) ? 'border-primario bg-primario text-white' : 'border-borde bg-white hover:bg-fondo'" x-text="op"></button>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </fieldset>
+
+    <div class="mt-6 grid gap-6 sm:grid-cols-2">
+      <fieldset>
+        <legend class="text-sm font-semibold">Categorías de gasto</legend>
+        <div class="mt-2 flex flex-wrap gap-1.5">
+          <template x-for="x in d.maestro.categoriasGasto" :key="x.clave">
+            <button type="button" class="rounded-full border px-3 py-1.5 text-sm transition" :data-gasto="x.clave" :aria-pressed="tiene('categoriasGasto', x.clave) ? 'true' : 'false'" @click="alternar('categoriasGasto', x.clave)"
+                    :class="tiene('categoriasGasto', x.clave) ? 'border-primario bg-primario text-white' : 'border-borde bg-white hover:bg-fondo'" x-text="x.nombre"></button>
+          </template>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend class="text-sm font-semibold">Tipos de ingreso</legend>
+        <div class="mt-2 flex flex-wrap gap-1.5">
+          <template x-for="x in d.maestro.tiposIngreso" :key="x.clave">
+            <button type="button" class="rounded-full border px-3 py-1.5 text-sm transition" :data-ingreso="x.clave" :aria-pressed="tiene('tiposIngreso', x.clave) ? 'true' : 'false'" @click="alternar('tiposIngreso', x.clave)"
+                    :class="tiene('tiposIngreso', x.clave) ? 'border-primario bg-primario text-white' : 'border-borde bg-white hover:bg-fondo'" x-text="x.nombre"></button>
+          </template>
+        </div>
+      </fieldset>
+    </div>
+
+    <div class="mt-6 flex justify-end">
+      <button type="submit" class="btn btn-primario h-11 px-6" data-guardar-catalogo :disabled="guardandoC" x-text="guardandoC ? 'Guardando…' : 'Guardar catálogo'"></button>
+    </div>
+  </form>
+</div>

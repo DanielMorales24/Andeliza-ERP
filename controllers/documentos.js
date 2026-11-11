@@ -12,7 +12,7 @@ async function base() {
   return {
     negocio,
     logo: await Negocio.logo(negocio.logoUrl),
-    color: config.negocio.colores.primario,
+    color: negocio.colores.primario,
     impuestoIncluido: config.valoresPorDefecto.impuestoIncluidoEnPrecio === true,
   };
 }

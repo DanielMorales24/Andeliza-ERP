@@ -7,7 +7,7 @@ const Negocio = require('./negocio');
 const Ventas = require('./ventas');
 const Contab = require('./contabilidad');
 const Est = require('./estadisticas');
-const { sumarDias, dinero, fecha } = require('../utils/formato');
+const { sumarDias, dinero, fecha, zonaHoraria } = require('../utils/formato');
 
 // Umbrales de las alertas del CAI: urgente con 5 números o 7 días, aviso con 30 días
 const UMBRAL = { numeros: 5, diasUrgente: 7, diasAviso: 30 };
@@ -49,7 +49,7 @@ async function inventarioContable() {
 function saludo(horaLocal) { return horaLocal < 12 ? 'Buenos días' : horaLocal < 19 ? 'Buenas tardes' : 'Buenas noches'; }
 
 function horaLocal() {
-  const p = new Intl.DateTimeFormat('en-GB', { timeZone: config.valoresPorDefecto.zonaHoraria, hour: '2-digit', hour12: false }).format(new Date());
+  const p = new Intl.DateTimeFormat('en-GB', { timeZone: zonaHoraria(), hour: '2-digit', hour12: false }).format(new Date());
   return Number(p) % 24;
 }
 

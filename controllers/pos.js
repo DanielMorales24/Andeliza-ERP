@@ -21,7 +21,7 @@ async function index(req, res, next) {
       facturacion,
       tasa,
       impuestoIncluido: config.valoresPorDefecto.impuestoIncluidoEnPrecio === true,
-      tiposVariante: config.valoresPorDefecto.tiposVariante,
+      tiposVariante: require('../utils/catalogo').tiposTodos(),   // todos los del catálogo: una variante se vende aunque su tipo ya no esté activo
       unidadesDecimales: unidadesDecimales(),
       usuarioId: req.user.id,
       hoy: hoyISO(),

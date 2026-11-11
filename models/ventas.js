@@ -3,6 +3,7 @@ const config = require('../client.config');
 const { ErrorValidacion } = require('../utils/validar');
 const { calcularTotales } = require('../utils/totales');
 const { permiteDecimales } = require('../utils/unidades');
+const { zonaHoraria } = require('../utils/formato');
 const Negocio = require('./negocio');
 
 // Una venta completa con cliente, vendedor y líneas (para el PDF y el resumen del POS)
@@ -163,7 +164,7 @@ async function listar(filtros) {
   const param = (valor) => { params.push(valor); return '$' + params.length; };
   // La zona horaria solo se manda si hay fechas: un parámetro que el SQL no usa lo rechaza Postgres
   let zonaParam = null;
-  const zona = () => zonaParam || (zonaParam = param(config.valoresPorDefecto.zonaHoraria));
+  const zona = () => zonaParam || (zonaParam = param(zonaHoraria()));
 
   if (desde) cond.push(`v.creado_en >= ((${param(desde)}::date)::timestamp AT TIME ZONE ${zona()})`);
   if (hasta) cond.push(`v.creado_en < (((${param(hasta)}::date + 1))::timestamp AT TIME ZONE ${zona()})`);

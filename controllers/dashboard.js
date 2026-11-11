@@ -15,7 +15,7 @@ async function index(req, res, next) {
     const claves = new Set(modulosVisibles(req.user).map((m) => m.clave));
     const ve = { pos: claves.has('pos'), inventario: claves.has('inventario'), finanzas: claves.has('finanzas'), facturas: claves.has('facturas'), estadisticas: claves.has('estadisticas') };
     const d = await Dashboard.panel(req.user, ve);
-    res.render('dashboard/index', { titulo: 'Inicio', d, moneda: config.valoresPorDefecto.moneda });
+    res.render('dashboard/index', { titulo: 'Inicio', d, moneda: res.locals.negocioActual.moneda });
   } catch (err) {
     next(err);
   }

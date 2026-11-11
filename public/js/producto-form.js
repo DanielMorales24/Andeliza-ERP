@@ -45,6 +45,14 @@ document.addEventListener('alpine:init', function () {
       // ---------- Variantes ----------
       mayus(t) { return t.charAt(0).toUpperCase() + t.slice(1); },
       opciones(tipo) { return this.d.opcionesVariante[tipo] || []; },
+      // Nombre del tipo según el catálogo ("Presentación"), si es un tipo que el negocio desactivó,
+      // y si un valor existe en el catálogo pero hoy no está activo (se conserva y se avisa)
+      nombreTipo(tipo) { return (this.d.nombresTipos && this.d.nombresTipos[tipo]) || this.mayus(tipo); },
+      tipoInactivo(tipo) { return (this.d.tiposInactivos || []).includes(tipo); },
+      opcionInactiva(tipo, valor) {
+        const v = String(valor || '').trim();
+        return !!v && ((this.d.opcionesMaestras && this.d.opcionesMaestras[tipo]) || []).includes(v) && !this.opciones(tipo).includes(v);
+      },
       get hayOpciones() { return this.d.tiposVariante.some((t) => this.opciones(t).length > 0); },
 
       nombreVariante(attrs) { return this.d.tiposVariante.map((t) => attrs[t]).filter(Boolean).join(' / '); },

@@ -31,7 +31,7 @@ async function reportePdf(req, res, next) {
     const filtros = Est.leerFiltros(req.query, await Est.hoy());
     const [resp, negocio, nombres] = await Promise.all([Est.respuesta(filtros, await contextoCxc(req)), Negocio.obtener(), Est.nombres(filtros.vendedor, filtros.categoria)]);
     const buffer = await Pdf.estadisticas({
-      negocio, logo: await Negocio.logo(negocio.logoUrl), color: config.negocio.colores.primario, ...resp, filtrosNombres: nombres,
+      negocio, logo: await Negocio.logo(negocio.logoUrl), color: negocio.colores.primario, ...resp, filtrosNombres: nombres,
     });
     // Un reporte de gestión se exporta con rastro: queda en la auditoría
     await Auditoria.registrar({

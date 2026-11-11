@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <%- include('../partials/head') %>
+</head>
+<%# El encabezado y el avance usan la variable --primario (no la clase de Tailwind) para que cambien al instante al probar una paleta %>
+<body class="min-h-screen bg-fondo font-sans text-tinta antialiased">
+  <header class="text-white" style="background: var(--primario)" data-encabezado>
+    <div class="mx-auto flex max-w-3xl items-center gap-3 px-5 py-4">
+      <img src="<%= negocioActual.logoUrl %>" alt="" class="h-10 w-10 flex-none rounded bg-white object-contain p-0.5" onerror="this.remove()">
+      <div class="min-w-0 flex-1">
+        <p class="truncate font-titulo text-xl font-semibold leading-tight"><%= negocioActual.nombre %></p>
+        <p class="text-xs text-white/80">Configuración inicial</p>
+      </div>
+      <form method="post" action="/logout"><button type="submit" class="rounded border border-white/40 px-3 py-1.5 text-sm font-medium hover:bg-white/10">Salir</button></form>
+    </div>
+    <div class="h-1" style="background: var(--acento)"></div>
+  </header>
+  <%- body %>
+  <%- script %>
+</body>
+</html>

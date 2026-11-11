@@ -146,6 +146,7 @@ document.addEventListener('alpine:init', function () {
 
       async guardar() {
         this.err = '';
+        if (!this.f.id && !this.f.claveValida) { this.err = 'La contraseña todavía no cumple los requisitos o no coincide con su confirmación.'; return; }
         this.guardando = true;
         try {
           const cuerpo = { nombre: this.f.nombre, rol_id: Number(this.f.rol_id) };

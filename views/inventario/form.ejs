@@ -34,7 +34,7 @@
           <div>
             <label class="etiqueta" for="p-unidad">Unidad de venta</label>
             <select id="p-unidad" class="campo" x-model="f.unidad">
-              <template x-for="u in d.unidades" :key="u"><option :value="u" x-text="u"></option></template>
+              <template x-for="u in d.unidades" :key="u.clave"><option :value="u.clave" x-text="u.nombre + (u.inactiva ? ' (inactiva)' : '')" :selected="u.clave === f.unidad"></option></template>
             </select>
           </div>
 
@@ -117,7 +117,7 @@
 
             <template x-for="tipo in d.tiposVariante" :key="tipo">
               <div class="mt-3" x-show="opciones(tipo).length > 0">
-                <p class="text-xs font-medium text-gray-600" x-text="mayus(tipo) + 's'"></p>
+                <p class="text-xs font-medium text-gray-600" x-text="nombreTipo(tipo)"></p>
                 <div class="mt-1.5 flex flex-wrap gap-1.5">
                   <template x-for="op in opciones(tipo)" :key="op">
                     <button type="button" @click="alternarOpcion(tipo, op)" :aria-pressed="generador.seleccion[tipo].includes(op)"
@@ -144,7 +144,7 @@
             <table class="min-w-full text-sm">
               <thead class="border-b border-borde bg-fondo text-left text-xs font-semibold text-gray-600">
                 <tr>
-                  <template x-for="tipo in d.tiposVariante" :key="tipo"><th scope="col" class="px-3 py-2 font-semibold" x-text="mayus(tipo)"></th></template>
+                  <template x-for="tipo in d.tiposVariante" :key="tipo"><th scope="col" class="px-3 py-2 font-semibold" x-text="nombreTipo(tipo) + (tipoInactivo(tipo) ? ' (inactivo)' : '')"></th></template>
                   <th scope="col" class="px-3 py-2 font-semibold">SKU</th>
                   <th scope="col" class="px-3 py-2 text-right font-semibold">Stock</th>
                   <th scope="col" class="px-3 py-2 text-right font-semibold">Mínimo</th>
@@ -155,7 +155,7 @@
                 <template x-for="(v, i) in variantes" :key="v.uid">
                   <tr>
                     <template x-for="tipo in d.tiposVariante" :key="tipo">
-                      <td class="px-3 py-1.5"><input class="campo w-28 py-1.5" :list="'opciones-' + tipo" x-model="v.atributos[tipo]" :aria-label="mayus(tipo) + ' de la variante ' + (i + 1)" maxlength="40" autocomplete="off"></td>
+                      <td class="px-3 py-1.5"><input class="campo w-28 py-1.5" :list="'opciones-' + tipo" x-model="v.atributos[tipo]" :aria-label="mayus(tipo) + ' de la variante ' + (i + 1)" maxlength="40" autocomplete="off"><span x-show="opcionInactiva(tipo, v.atributos[tipo])" class="mt-0.5 block text-xs text-amber-700">(inactiva)</span></td>
                     </template>
                     <td class="px-3 py-1.5"><input class="campo w-36 py-1.5" x-model="v.sku" :placeholder="skuAuto(v) || 'Automático'" maxlength="50" aria-label="SKU de la variante" autocomplete="off"></td>
                     <td class="px-3 py-1.5"><input class="campo w-24 py-1.5 text-right" type="number" inputmode="decimal" min="0" step="any" x-model="v.stock" aria-label="Stock de la variante"></td>

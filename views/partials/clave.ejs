@@ -1,0 +1,37 @@
+<%
+  // Campo de contraseña con retroalimentación en vivo (decisión D-10). Debe ir dentro de un elemento con
+  // x-data="claveSegura()" (public/js/contrasena.js). Es una ayuda para la persona: quien valida es el servidor.
+  // Uso: include('../partials/clave', { campo: { id, nombre, nombreConfirmar, etiqueta, etiquetaConfirmar, requerido } })
+  const _c = Object.assign({ id: 'nueva', nombre: 'nueva', nombreConfirmar: 'confirmar', etiqueta: 'Contraseña nueva', etiquetaConfirmar: 'Repite la contraseña nueva', requerido: true }, typeof campo !== 'undefined' && campo ? campo : {});
+%>
+<label for="<%= _c.id %>" class="etiqueta mt-4"><%= _c.etiqueta %></label>
+<div class="relative">
+  <input id="<%= _c.id %>"<% if (_c.nombre) { %> name="<%= _c.nombre %>"<% } %> class="campo pr-12" :type="ver ? 'text' : 'password'" x-model="clave"
+         <%= _c.requerido ? 'required' : '' %> maxlength="72" autocomplete="new-password" aria-describedby="<%= _c.id %>-requisitos">
+  <button type="button" data-ojo class="absolute right-1 top-1/2 flex h-9 w-10 -translate-y-1/2 items-center justify-center rounded text-gray-500 hover:text-primario"
+          @click="ver = !ver" :aria-pressed="ver ? 'true' : 'false'" :aria-label="ver ? 'Ocultar la contraseña' : 'Mostrar la contraseña'">
+    <span x-show="!ver"><%- icono('eye', 'h-5 w-5') %></span><span x-show="ver" x-cloak><%- icono('eye-off', 'h-5 w-5') %></span>
+  </button>
+</div>
+
+<div class="mt-2 flex items-center gap-2" x-show="clave.length > 0" x-cloak data-fortaleza>
+  <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-200">
+    <div class="h-full rounded-full transition-all duration-200" :class="['', 'bg-red-500', 'bg-amber-500', 'bg-emerald-600'][nivel]" :style="'width:' + [0, 34, 67, 100][nivel] + '%'" data-fortaleza-barra></div>
+  </div>
+  <span class="w-12 text-right text-xs font-semibold" :class="['', 'text-red-700', 'text-amber-700', 'text-emerald-700'][nivel]" x-text="textoFortaleza" data-fortaleza-texto></span>
+</div>
+
+<ul id="<%= _c.id %>-requisitos" class="mt-2 space-y-1 text-xs" aria-label="Requisitos de la contraseña">
+  <template x-for="r in requisitos" :key="r.id">
+    <li class="flex items-center gap-1.5" :class="r.ok ? 'text-emerald-700' : 'text-gray-500'" :data-requisito="r.id" :data-ok="r.ok ? 'si' : 'no'">
+      <span aria-hidden="true" class="inline-flex h-4 w-4 flex-none items-center justify-center rounded-full text-[10px] font-bold" :class="r.ok ? 'bg-emerald-100' : 'bg-gray-100'" x-text="r.ok ? '✓' : '✗'"></span>
+      <span x-text="r.texto"></span><span class="sr-only" x-text="r.ok ? ' (cumplido)' : ' (pendiente)'"></span>
+    </li>
+  </template>
+</ul>
+
+<label for="<%= _c.id %>-confirmar" class="etiqueta mt-4"><%= _c.etiquetaConfirmar %></label>
+<input id="<%= _c.id %>-confirmar"<% if (_c.nombreConfirmar) { %> name="<%= _c.nombreConfirmar %>"<% } %> class="campo" :class="noCoincide ? 'border-red-400' : ''" :type="ver ? 'text' : 'password'" x-model="confirmar"
+       <%= _c.requerido ? 'required' : '' %> maxlength="72" autocomplete="new-password">
+<p class="mt-1 text-xs" x-show="confirmar.length > 0" x-cloak :class="coincide ? 'text-emerald-700' : 'text-red-700'" data-coincide
+   x-text="coincide ? '✓ Las contraseñas coinciden' : '✗ Las contraseñas no coinciden'"></p>
