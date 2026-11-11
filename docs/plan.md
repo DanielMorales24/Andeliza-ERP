@@ -30,7 +30,7 @@ El piso de app completa es el conjunto mínimo de capacidades que hace que la ap
 | **2** | **Planeación y datos maestros.** Planear el trabajo y poder cargar el catálogo desde la nube. | `mapa-historias.md`, `plan.md`, `issues_mvp.md`, bitácora 2. Categorías, clientes, proveedores y productos con imagen, variantes y kits. Facturación interna. Primer despliegue en Vercel. | HU-04 a HU-09, HU-12 | ✔ |
 | **3** | **Modelo de datos y punto de venta.** Ordenar el modelo y poder cobrar con factura. | `modelo-datos.md`, migraciones numeradas, `seed.sql`, bitácora 3. Punto de venta, facturación con CAI e interna, PDF, cotización e historial. | HU-10, HU-11, HU-13, HU-14, HU-15 | ✔ |
 | **4** | **Finanzas y contabilidad. Se alcanza el piso de app completa.** El dueño ve su situación real. | Partida doble, cuentas por cobrar y por pagar, ingresos, gastos y compras, libro diario, panel financiero y cuatro reportes en PDF. | HU-16 a HU-25 | ✔ |
-| **5** | **Inventario visual y alertas.** Saber qué reponer. | *Absorbida por la Fase 2 (decisión D-02).* El listado ya muestra la foto de cada producto, su estado de stock y filtros con conteo, y el panel muestra los artículos por reponer. La lista de reposición pasa a la Fase 8 y las pruebas de aceptación contra los criterios Gherkin, a la semana 9. | HU-26 | ◐ *(resuelta en la Fase 2)* |
+| **5** | **Inventario visual y alertas.** Saber qué reponer. | *Absorbida por la Fase 2 (decisión D-02).* El listado ya muestra la foto de cada producto, su estado de stock y filtros con conteo, y el panel muestra los artículos por reponer. La lista de reposición pasa a la Fase 8 y las pruebas de aceptación contra los criterios Gherkin, a la semana 9. **En la semana 5 se construyeron la Fase 6 (fila 6) y la Fase 6.5, preparación para producción** (decisiones D-07 a D-11): una instancia por cliente, catálogo del negocio configurable, asistente de configuración inicial, paletas de colores validadas, contraseñas con retroalimentación en vivo y categorías contables nuevas. | HU-26 · HU-33 a HU-36 (Fase 6.5) | ◐ *(resuelta en la Fase 2)* · ✔ *(Fase 6.5)* |
 | **6** | **Estadísticas.** Entender qué se vende más y cuándo. | *Construida en la semana 5.* Indicadores comparados con el período anterior, seis gráficos, insights automáticos, ranking de vendedores y reporte en PDF. En la misma semana se rediseñó el panel de inicio y se agregó el menú de perfil. | HU-27 | ✔ |
 | **7** | **Configuración y seguridad.** Que el negocio se administre solo y que las cuentas estén protegidas. | Fase 7: datos del negocio, CAI y usuarios desde la interfaz. Contraseñas con hash, protección CSRF y límite de intentos. Revisión del formato de factura con un contador. | HU-28, HU-29 | ◐ *(construida en la semana 4)* |
 | **8** | **Avisos automáticos y asistente con IA.** Que el sistema avise solo y responda preguntas. *(Ideas por validar con las pymes.)* | Fase 8: notificaciones automáticas por WhatsApp o correo (stock bajo con su lista de reposición y facturas vencidas), asistente virtual con IA para consultar ventas e inventario con preguntas en lenguaje natural, y método de pago en el punto de venta. | HU-30, HU-31, HU-32 | ⬜ |
@@ -70,9 +70,59 @@ El piso de app completa es el conjunto mínimo de capacidades que hace que la ap
 **Consecuencias.** La Fase 8 se reemplaza por ideas de valor real: avisos automáticos (HU-30) y un asistente virtual con IA (HU-32). El método de pago en el punto de venta (HU-31) se mantiene. La tabla `codigos_temporales`, que la Fase 1 dejó para ese fin, hoy no la usa ninguna pantalla y puede eliminarse en una migración futura.
 
 
+### Decisión D-07: una instancia por cliente, con el mismo código
+
+**Decisión.** Andeliza se despliega una vez por cliente: cada negocio tiene su propio proyecto en Vercel y su propia base en Supabase, y todos usan el mismo repositorio y el mismo código. Desde la semana 5 hay dos instancias: `andeliza-dev.vercel.app` (el Supabase de siempre, solo para desarrollo y pruebas) y `andeliza-jcl-sport.vercel.app` (un Supabase nuevo, producción de JCL Sport). Lo que distingue a una instancia vive en tres lugares: las variables de entorno de su proyecto de Vercel, la fila de `configuracion_negocio` de su base y el seed con el que se instaló.
+
+**Alternativas.** (a) Multi-tenant en una sola base: una columna `negocio_id` en cada tabla, filtros en cada consulta y RLS en Supabase. (b) Un repositorio clonado por cliente, con sus valores escritos en `client.config.js` (lo que proponía la guía anterior "Cómo crear un cliente nuevo"). (c) Una instancia por cliente con el mismo código.
+
+**Por qué se eligió (c).** Aísla los datos de cada negocio por construcción: una consulta con un error no puede mostrar datos de otro cliente porque esos datos están en otra base. La copia de seguridad, la restauración y la baja de un cliente son por base. Con (a) habría que agregar el negocio a 26 tablas y a todas las funciones que protegen el stock, la numeración fiscal y la partida doble, que es justo donde un error es más caro. Con (b) cada clon termina divergiendo y un arreglo hay que copiarlo a mano en cada repositorio; con (c) se publica a todos con el mismo `git push`.
+
+**Consecuencias.** Cada migración se ejecuta en cada base, primero en desarrollo. Cada cliente nuevo cuesta un proyecto de Supabase y uno de Vercel. Nada que sea propio de un negocio puede quedar escrito en el código: de ahí la decisión D-08. Técnicamente sigue siendo *single-tenant*: no hay tenencia compartida, hay varias instancias independientes.
+
+### Decisión D-08: `client.config.js` pasa a ser el catálogo maestro
+
+**Decisión.** `client.config.js` deja de guardar los valores de un cliente y pasa a decir **qué existe** en el sistema: unidades de venta (y cuáles se venden en fracciones), tipos de variante y sus opciones, monedas, formatos de fecha, zonas horarias, tasas de impuesto, categorías de gasto, tipos de ingreso, métodos de pago, documentos de identidad y paletas de colores. Lo que **eligió** cada negocio se guarda en su base (`configuracion_negocio`, migración 07) y se cambia desde *Configuración → Negocio* sin tocar el código. Una elección en `NULL` significa "las predeterminadas del catálogo".
+
+**Alternativas.** (a) Dejar los valores en el archivo: obliga a un `git push` por cada cambio y choca con D-07, porque el archivo es el mismo para todos los clientes. (b) Una tabla por catálogo en la base (unidades, tallas, colores…) con pantallas de alta y baja: cada negocio podría inventar sus propias opciones. (c) Catálogo fijo en el código y la elección en columnas JSONB de la base.
+
+**Por qué se eligió (c).** Varias opciones tienen comportamiento atado, no son solo texto: una unidad decide si el punto de venta acepta fracciones, una paleta está validada para que el texto se lea, y cada categoría de gasto corresponde a una cuenta contable. Con (b) un negocio podría crear la unidad "metros" sin que el punto de venta supiera que admite decimales. Con (c) el negocio solo enciende o apaga lo que ya funciona. Las elecciones se validan contra el catálogo al guardar (en el servidor) y la base comprueba su forma con un `CHECK`.
+
+**Consecuencias.** Agregar una opción nueva es un cambio de código que llega a todas las instancias, a propósito. Desactivar algo nunca borra datos: un producto conserva su unidad o sus variantes aunque ya no estén activas, y se muestran marcadas como "(inactiva)". Las categorías de gasto y los tipos de ingreso tienen, además, su cuenta contable: desde la migración 08 las funciones de registro validan contra el plan de cuentas y no contra una lista fija, así que una categoría nueva solo necesita su cuenta y su entrada en el catálogo. Con eso se agregaron *servicios* (6106), *impuestos* (6107) y *comisiones* (4206).
+
+### Decisión D-09: un asistente de configuración inicial obligatorio para el administrador del cliente
+
+**Decisión.** Cuando el administrador del cliente entra por primera vez a una instancia nueva, después de cambiar su contraseña temporal, solo puede usar un asistente de seis pasos: bienvenida, datos del negocio, logo y paleta de colores (esenciales), unidades de venta y primer vendedor (opcionales, con "Saltar"). El asistente se detecta con **dos marcas**: `configuracion_negocio.onboarding_completado` (el negocio ya fue configurado) y `usuarios.onboarding_pendiente` (a quién le toca hacerlo). Se bloquea la navegación solo cuando la persona lo tiene pendiente **y** el negocio todavía no lo completó.
+
+**Alternativas.** (a) Las dos marcas. (b) Solo la marca del usuario: no dice nada del negocio, no hay dónde recordar el paso en que se quedó, y crear otro administrador o restablecer una contraseña podría reabrirlo. (c) Deducirlo de los datos (por ejemplo, "si el RTN está vacío"): una instancia de desarrollo con datos incompletos quedaría bloqueada sin razón. (d) Un recorrido guiado que no bloquea: no garantiza que la primera factura salga con RTN, dirección y logo.
+
+**Por qué se eligió (a).** Cada marca responde una pregunta distinta. El usuario `soporte` nace sin la marca y nunca lo ve. Las instalaciones que ya existían no lo ven porque ningún usuario tiene la marca (la migración la crea en `FALSE`). Restablecer una contraseña no toca ninguna de las dos, así que el asistente no reaparece. Cerrarlo lo hace la función `completar_onboarding`, que comprueba en la base que estén los datos esenciales, así que no se puede saltar con una petición armada a mano.
+
+**Consecuencias.** Cada paso se guarda al continuar y se recuerda el paso más avanzado (`onboarding_paso`): se puede salir y retomar otro día. Solo se puede volver un paso atrás y no se pueden saltar pasos. Mientras está pendiente, las rutas de datos responden 403 con un mensaje claro y las pantallas redirigen al asistente.
+
+### Decisión D-10: un estándar de contraseñas con retroalimentación en vivo
+
+**Decisión.** Un solo componente de contraseña se usa en las cuatro pantallas donde se elige una: *Cambiar contraseña*, *Recuperar acceso*, *Configuración → Usuarios* y el último paso del asistente. Muestra los requisitos con ✓ o ✗ mientras se escribe, una barra de fortaleza, un botón para ver lo escrito, una confirmación que avisa si no coincide, y deja el botón de guardar deshabilitado hasta que todo esté en regla.
+
+**Alternativas.** (a) Endurecer la política (mayúscula y símbolo obligatorios): las contraseñas actuales dejarían de cumplir al cambiarlas y el navegador pediría algo distinto de lo que exige el servidor. (b) Una librería de fortaleza como zxcvbn: es una dependencia nueva de unos 800 KB. (c) El mismo componente con exactamente las reglas del servidor.
+
+**Por qué se eligió (c).** Los requisitos que se marcan son los mismos que valida `validar_contrasena` en la base (8 caracteres, una letra, un número, distinta del usuario, máximo 72 bytes), así que la pantalla nunca promete algo que el servidor rechace ni rechaza algo que el servidor acepte. El servidor sigue siendo quien decide: no se tocó el `CHECK` ni la función.
+
+**Consecuencias.** La barra de fortaleza orienta pero no bloquea: una contraseña de 8 caracteres que cumple los requisitos se acepta aunque la barra diga "Débil". Si algún día se endurece la política, se cambia en la base y en `public/js/contrasena.js` a la vez.
+
+### Decisión D-11: paletas de colores predefinidas en lugar de un selector libre
+
+**Decisión.** El negocio elige su identidad visual entre diez paletas del catálogo (un color primario y un acento). El servidor copia los colores **desde el catálogo**: del navegador solo llega el identificador de la paleta, y la base rechaza cualquier color que no tenga la forma `#RRGGBB`. Cada paleta cumple tres reglas, comprobadas por pruebas: texto blanco sobre el primario con contraste de al menos 4.5:1 (WCAG AA), acento sobre el primario de al menos 3:1 y una distancia de color ΔE de al menos 25 entre los dos.
+
+**Alternativas.** (a) Un selector libre sin validar: permite combinaciones ilegibles. (b) Un selector libre con validación. (c) Paletas predefinidas.
+
+**Por qué se eligió (c).** Garantiza que el texto se lea por construcción y no por advertencia. La validación de (b) ya existe en `utils/colores.js`, pero ofrecer el selector libre queda como deuda: pide diseñar bien los mensajes y la vista previa. Al medir las paletas propuestas se encontró un problema: **ninguno de los diez acentos llega a 3:1 sobre fondo blanco** (son tonos claros pensados para ir sobre el primario). En lugar de descartarlas, el sistema deriva un "acento fuerte" (el mismo tono oscurecido hasta alcanzar 3:1) que se usa en gráficos, en el anillo de foco y en barras finas sobre blanco.
+
+**Consecuencias.** La paleta de fábrica es Azul Deportivo (`#1E40AF` y `#F59E0B`), que son los colores que el sistema ya usaba: una instalación existente no cambia de aspecto al aplicar la migración 07. Una paleta nueva solo se puede agregar si pasa las pruebas de contraste.
+
 ### Avance frente al plan
 
-Al momento de esta versión del plan, las Fases 1 a 4 están construidas (y desde entonces también la Fase 7, en la semana 4, y la Fase 6, en la semana 5, con la Fase 5 absorbida por la Fase 2): el piso de app completa ya existe y se alcanzó al cierre de la semana 3. El tiempo que eso deja libre se reasigna a lo que más riesgo tiene para la calidad: la seguridad de las cuentas, las pruebas con usuarios reales y el pulido.
+Al momento de esta versión del plan, las Fases 1 a 4 están construidas (y desde entonces también la Fase 7, en la semana 4, la Fase 6, en la semana 5, y la preparación para producción (Fase 6.5, decisiones D-07 a D-11), también en la semana 5, con la Fase 5 absorbida por la Fase 2): el piso de app completa ya existe y se alcanzó al cierre de la semana 3. El tiempo que eso deja libre se reasigna a lo que más riesgo tiene para la calidad: la seguridad de las cuentas, las pruebas con usuarios reales y el pulido.
 
 ## 3. Metodología de trabajo
 

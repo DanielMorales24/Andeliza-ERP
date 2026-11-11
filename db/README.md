@@ -30,7 +30,7 @@ Andeliza se instala **una vez por cliente** (decisión D-07): el mismo código, 
 
 Después de la cadena la base tiene **26 tablas y 2 vistas**.
 
-> **Importante para el repositorio.** Hasta la semana 6 la carpeta `migrations/` solo tenía 01 a 04 y `functions.sql` era el de la Fase 4. Con eso una instalación desde cero **no funcionaba**: `seed.sql` fallaba (`column "rol_id" of relation "usuarios" does not exist`) y la base quedaba sin usuarios, sin roles y sin función de inicio de sesión. Desde esta entrega están todas las migraciones y el `functions.sql` de la Fase 7, que es el mismo que ya corre en la base de desarrollo.
+> **Importante para el repositorio.** Hasta la Fase 6.5 (semana 5) la carpeta `migrations/` solo tenía 01 a 04 y `functions.sql` era el de la Fase 4. Con eso una instalación desde cero **no funcionaba**: `seed.sql` fallaba (`column "rol_id" of relation "usuarios" does not exist`) y la base quedaba sin usuarios, sin roles y sin función de inicio de sesión. Desde esta entrega están todas las migraciones y el `functions.sql` de la Fase 7, que es el mismo que ya corre en la base de desarrollo.
 
 ## Instalación de una instancia nueva (producción)
 

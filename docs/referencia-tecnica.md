@@ -18,12 +18,13 @@ Stack: Node.js 20 + Express, EJS, PostgreSQL (Supabase), Tailwind y Alpine.js po
 | 4 | Finanzas y contabilidad: partida doble, cuentas por cobrar y por pagar, reportes en PDF | Hecha |
 | 5 | Inventario visual y alertas de stock | Absorbida por la Fase 2 |
 | 6 | Estadísticas de ventas, panel de inicio rediseñado y menú de perfil | Hecha |
+| 6.5 | Preparación de producción: una instancia por cliente, catálogo maestro, asistente de configuración inicial, paletas de colores y contraseñas con retroalimentación en vivo | Hecha (semana 5, junto con la Fase 6) |
 | 7 | Configuración, usuarios y roles con permisos (hecha antes que la 6, por decisión de arquitectura D-01) | Hecha |
 | 8 | Avisos automáticos, asistente virtual con IA y método de pago | Pendiente (ideas por validar) |
 
 ## Puesta en marcha local
 
-La instalación paso a paso está en el [README](../README.md#instalación). Resumen del orden de la base de datos: `db/migrations/01` a `04`, luego `db/functions.sql` y, si quieres datos de ejemplo, `db/seed.sql`.
+La instalación paso a paso está en el [README](../README.md#instalación). Resumen del orden de la base de datos: `db/migrations/01` a `08`, luego `db/functions.sql` y al final **un** seed: `db/seed.sql` para desarrollo o `db/seed-produccion.sql` para la instancia de un cliente. El detalle de cada caso está en [db/README.md](../db/README.md).
 
 ## Estructura
 
@@ -55,8 +56,10 @@ models/dashboard.js     Panel de inicio: ventas del día, cobranza, stock, factu
 public/js/iconos.js     Íconos de línea compartidos por el servidor (EJS) y el navegador (Alpine)
 public/js/estadisticas.js, dashboard.js   Filtros y gráficos de Chart.js
 views/                 EJS: layouts, partials y una carpeta por módulo
-db/                    migrations/ (01 a 06), functions.sql, seed.sql y README.md
+db/                    migrations/ (01 a 08), functions.sql, seed.sql (desarrollo), seed-produccion.sql (un cliente) y README.md
 ```
+
+**Archivos nuevos de la Fase 6.5.** `middlewares/negocio.js` (carga el negocio en cada petición), `utils/catalogo.js` (catálogo maestro y elecciones), `utils/colores.js` (contraste y paletas), `utils/imagen.js` (tamaño de PNG y JPEG), `routes/onboarding.js`, `controllers/onboarding.js`, `views/layouts/onboarding.ejs`, `views/onboarding/index.ejs`, `views/partials/clave.ejs` (campo de contraseña), `views/configuracion/_catalogo.ejs`, `public/js/onboarding.js`, `public/js/contrasena.js`, `public/js/config-catalogo.js`, `db/migrations/07_migracion_fase6.5.sql`, `db/migrations/08_migracion_fase6.5_categorias.sql`, `db/migrations/08_migracion_fase6.5_categorias.sql` y `db/seed-produccion.sql`.
 
 ## Facturación: modo SAR o modo interno
 
@@ -260,7 +263,8 @@ Todas son opcionales: si no existen se usa el valor de la derecha.
 |---|---|---|
 | `impuestoIncluidoEnPrecio` | `false` | `true` si los precios de venta ya incluyen el impuesto (se desglosa en lugar de sumarlo) |
 | `diasValidezCotizacion` | `15` | Días de vigencia que muestra la cotización |
-| `unidadesDecimales` | `kilo, libra, metro, yarda, litro, galon, onza` | Unidades que se pueden vender en fracciones; las demás van en enteros |
+
+Desde la Fase 6.5 `unidadesDecimales` ya no existe: cada unidad del catálogo maestro dice si se vende en fracciones (`decimal: true`). La moneda, el formato de fecha, la zona horaria y la tasa de impuesto de `valoresPorDefecto` son solo los valores de fábrica: lo que rige es lo que el negocio eligió en su base (ver *client.config.js como catálogo maestro*).
 
 ## Finanzas y contabilidad (`/finanzas`, solo administrador)
 
@@ -286,11 +290,16 @@ arrancan en cero: con *Saldo inicial* se registra con cuánto dinero empezó el 
 | 3101 | Capital y aportes | Patrimonio |
 | 4101 | Ventas | Ingreso |
 | 4201 a 4205 | Intereses, alquileres, servicios, inversiones y otros ingresos | Ingreso |
+| 4206 | Comisiones ganadas *(migración 08)* | Ingreso |
 | 5101 | Costo de ventas | Gasto |
 | 5201 | Ajustes de inventario (mermas y sobrantes) | Gasto |
 | 6101 a 6105 | Logística, marketing, operativos, mantenimiento y otros gastos | Gasto |
+| 6106 | Servicios públicos: agua, luz, internet y teléfono *(migración 08)* | Gasto |
+| 6107 | Impuestos municipales, tasas y contribuciones *(migración 08)* | Gasto |
 
-El sistema ubica cada cuenta por su `clave` (no por el código), así que se puede renumerar sin romper nada.
+El sistema ubica cada cuenta por su `clave` (no por el código), así que se puede renumerar sin romper nada. Las cuentas 6106, 6107 y 4206 continúan la numeración: 6105 y 4205 ya eran *Otros* y no se renumeraron porque esos códigos aparecen en partidas registradas y en reportes impresos.
+
+**Categorías de gasto y tipos de ingreso.** Cada categoría de gasto es una cuenta `gasto_<clave>` y cada tipo de ingreso una cuenta `ingreso_<clave>`. Desde la migración 08, `registrar_gasto` y `registrar_ingreso` ya no tienen una lista fija: aceptan una clave si su cuenta existe, está activa y es del tipo correcto (una clave como `ventas` no puede usarse para apuntar a la cuenta de ventas). Hay 7 categorías de gasto (logística, marketing, operativos, mantenimiento, **servicios**, **impuestos** y otros) y 6 tipos de ingreso (intereses, alquileres, servicios, inversiones, **comisiones** y otros). *Impuestos* es un gasto del negocio (impuestos municipales, permisos de operación, tasas de aseo y bomberos, contribuciones): no tiene que ver con el ISV por pagar (2201), que es el impuesto cobrado en las ventas y es un pasivo. Qué categorías **ofrece** cada negocio lo decide su catálogo (ver *client.config.js como catálogo maestro*); que la categoría **exista** lo decide el plan de cuentas.
 
 ### Qué partida genera cada operación
 | Operación | Debe | Haber |
@@ -316,6 +325,7 @@ El sistema ubica cada cuenta por su `clave` (no por el código), así que se pue
 Ingresos varios, gastos y compras de inventario, cada uno con su condición (*Cobrado/Pagado* o *Por cobrar/Por pagar*).
 Una **compra** sube el stock (por variante si el producto las tiene) y recalcula el costo del producto con **promedio ponderado**.
 Se pueden anular ingresos y gastos que no tengan cobros o pagos; las compras no se anulan en esta fase (se corrige con un asiento manual).
+El selector de categoría (gastos) y de tipo (ingresos) muestra solo lo que el negocio tiene activo, con su nombre del catálogo. Las categorías nuevas aparecen en el libro diario, la balanza y el estado de resultados como cualquier otra cuenta de gasto o de ingreso: los reportes agrupan por tipo de cuenta, no por una lista.
 
 ### Inventario del libro y existencias
 El stock puede cambiar por fuera del libro (por ejemplo, editando un producto). Cuando la diferencia con el libro llega a L 1.00 o más,
@@ -350,26 +360,117 @@ Los ingresos y gastos se reconocen cuando ocurren, no cuando se cobran o pagan: 
 Las rutas responden 404 si `funcionalidades.finanzas` está en `false`; las compras, si `compras` está en `false`.
 Ajustes en la base (`configuracion_negocio`): `zona_horaria` (para saber qué día es «hoy») y `dias_credito`.
 
-## Cómo crear un cliente nuevo
+## Instalación por cliente (multi-instancia)
 
-1. **Clonar el repo** en una carpeta nueva con el nombre del cliente y crear un repositorio propio para él.
-2. **Editar `client.config.js`**: datos del negocio, colores, funcionalidades activas y valores por
-   defecto. Reemplazar `public/img/logo.png` por el logo del cliente.
-3. **Crear un proyecto nuevo en Supabase** y guardar la contraseña de la base de datos.
-4. **Correr los scripts de `db/`** en el SQL Editor: `migrations/01` a `04`, `functions.sql` y, si quieres datos de ejemplo, `seed.sql`.
-   Para una demo sirve `db/seed.sql`. Para producción, un seed propio con solo los usuarios,
-   los datos del negocio y la configuración fiscal real. En una base nueva el bloque DROP se queda comentado.
-5. **Crear un proyecto nuevo en Vercel**.
-6. **Conectarlo al repositorio** del cliente.
-7. **Configurar las variables de entorno** en Vercel:
-   - `DATABASE_URL`: la cadena del *Transaction pooler* de Supabase (puerto 6543).
-   - `SESSION_SECRET`: un texto largo y aleatorio, distinto para cada cliente.
-   - `SUPABASE_URL` y `SUPABASE_KEY`: la `service_role` key, solo en el servidor.
-   
-   Después del primer despliegue, abrir `/salud` y probar el login.
-8. **Conectar el dominio propio** en Vercel > Settings > Domains y apuntar el DNS.
+Andeliza se despliega **una vez por cliente** con el mismo repositorio (decisión D-07). Cada instancia tiene su proyecto de Vercel y su base de Supabase:
 
-Antes de entregarlo: cambiar las contraseñas de las cuentas de demostración (`admin`, `vendedor`, `contador` y `supervisor`) o desactivarlas desde *Configuración → Usuarios*.
+| Instancia | Dirección | Base | Seed con que se instaló |
+|---|---|---|---|
+| Desarrollo y pruebas | `andeliza-dev.vercel.app` | El Supabase de siempre | `db/seed.sql` (datos de prueba completos) |
+| Producción de JCL Sport | `andeliza-jcl-sport.vercel.app` | Un Supabase nuevo | `db/seed-produccion.sql` (datos mínimos) |
+
+Lo único que distingue a una instancia de otra está en tres lugares: las **variables de entorno** de su proyecto de Vercel (`DATABASE_URL`, `SESSION_SECRET`, `SUPABASE_URL` y `SUPABASE_KEY`), el contenido de **`configuracion_negocio`** en su base (nombre, RTN, logo, paleta, unidades, moneda…) y el **seed** con que se instaló. El código no contiene nada propio de un negocio.
+
+**Cómo se instala un cliente nuevo.**
+
+1. **Supabase.** Crear un proyecto nuevo y guardar la contraseña de la base. En *SQL Editor* ejecutar en orden `db/migrations/01` a `08`, `db/functions.sql` y `db/seed-produccion.sql`. **Antes de ejecutar el seed**, reemplazar en una copia local el marcador `CAMBIAR_ESTA_CLAVE_ANTES_DE_EJECUTAR` por una contraseña temporal (8 caracteres o más, con letras y números): si se ejecuta sin reemplazarlo, la política de contraseñas lo detiene y no se crea ningún usuario. El seed también se detiene con un mensaje si falta la migración 07 o `functions.sql`, y no cambia nada si la base ya tiene usuarios.
+2. **Vercel.** Crear un proyecto nuevo e importarle **este mismo repositorio**. Configurar sus cuatro variables: la `DATABASE_URL` del *Transaction pooler* de la base nueva (puerto 6543), un `SESSION_SECRET` largo y distinto del de las otras instancias, y la `SUPABASE_URL` y la `SUPABASE_KEY` (`service_role`, solo en el servidor) de ese mismo proyecto.
+3. **Primer despliegue.** Abrir `/salud`: debe decir `ok` y `conectada`.
+4. **Cuentas.** Antes de compartir la dirección, entrar con `soporte` (con la contraseña temporal que se puso en el seed) y cambiarla; después con `admin` y cambiarla. El sistema obliga a las dos cosas.
+5. **Configuración del negocio.** El administrador del cliente ve el asistente de configuración inicial (sección siguiente). `soporte` no lo ve.
+6. **Dominio propio** (opcional): Vercel > *Settings* > *Domains*.
+
+**Cómo se actualizan todas las instancias.** Una migración nueva se ejecuta **en cada base** (en una base en uso, solo la migración: no hace falta volver a correr `functions.sql`, y en una base con productos y sin contabilidad iniciada no conviene, porque la inicia por su cuenta): primero en desarrollo y después en la de cada cliente, y recién entonces se hace el `git push` (las migraciones aditivas, como la 06 y la 07, van antes del código). Si los dos proyectos de Vercel siguen la misma rama, un `push` despliega en los dos a la vez: por eso la migración tiene que estar en ambas bases antes. Lo recomendable es que el proyecto de producción siga una rama propia (por ejemplo `produccion`) y se promueva con un *merge* cuando desarrollo esté verificado.
+
+## `client.config.js` como catálogo maestro
+
+**La regla (decisión D-08): el archivo dice qué existe; la base dice qué eligió este negocio.** El archivo es igual para todas las instancias y no se edita para un cliente. Contiene:
+
+| Catálogo | Qué trae | Lo elige el negocio en |
+|---|---|---|
+| `unidades` | 21 unidades de venta. Las de `decimal: true` (kilo, libra, onza, quintal, metro, yarda, pie, litro, galón) se venden en fracciones | `unidades_activas` |
+| `tiposVariante` | Talla, color, equipo, material, acabado, capacidad, presentación | `tipos_variante_activos` |
+| `opcionesVariante` | Las opciones de cada tipo, por grupos: tallas XS a XXXL y 28 a 46, 15 colores, 6 equipaciones, materiales, acabados, capacidades y presentaciones | `opciones_variante_activas` |
+| `categoriasGasto` / `tiposIngreso` | 7 categorías de gasto y 6 tipos de ingreso, cada uno con su cuenta en el plan de cuentas. Vienen activos todos menos *comisiones*, que solo usan los negocios que cobran comisiones o referidos | `categorias_gasto_activas`, `tipos_ingreso_activos` |
+| `monedas`, `formatosFecha`, `zonasHorarias`, `tasasImpuesto` | L, $, Q, ₡ y C$; tres formatos; ocho zonas de Centroamérica y México; 0, 12, 13, 15, 16 y 18 % | `moneda`, `formato_fecha`, `zona_horaria`, `tasa_impuesto` |
+| `paletas` | Diez paletas validadas | `paleta_id`, `color_primario`, `color_acento` |
+| `metodosPago`, `documentosIdentidad` | Efectivo, transferencia, tarjeta y cheque; RTN, DNI, cédula, pasaporte y NIT | Todavía sin pantalla: quedan listos para HU-31 |
+
+**Cómo se guardan las elecciones.** Son columnas de `configuracion_negocio` (migración 07). Las listas son arreglos JSON (`unidades_activas = ["unidad","par"]`) y las opciones de variante un objeto por tipo (`{"talla":["S","M"],"color":["Rojo"]}`). Una columna en `NULL` significa "las predeterminadas del catálogo" (las marcadas `predeterminada: true`), que reproducen exactamente lo que el sistema hacía antes de la Fase 6.5: una instalación existente que no toca nada se ve y se comporta igual.
+
+**Cómo se leen.** `middlewares/negocio.js` carga la fila una vez por petición (lectura por llave primaria, sin caché: en Vercel cada instancia tendría la suya) y la deja en `res.locals.negocioActual`, también para las pantallas sin sesión. `utils/catalogo.js` (`resolver`) la convierte en lo vigente: descarta lo que no existe en el catálogo, ordena como el catálogo y, si no queda nada, usa las predeterminadas. Lo mismo hace `models/negocio.js` con la moneda, el formato de fecha y la zona horaria, que aplica a `utils/formato.js` para que todos los montos y fechas (pantallas, PDF y el `window.APP` del navegador) usen lo elegido.
+
+**Dónde se usa cada elección.** Las unidades y las variantes, en el formulario de producto y su validación. El "decimal" de la unidad, en el punto de venta. Las categorías y los tipos, en *Finanzas → Movimientos*. La tasa, en las ventas con comprobante interno (con CAI manda la tasa del CAI). La paleta, en todas las pantallas y en los PDF.
+
+**Lo desactivado no se pierde.** Si un producto ya usa una unidad, un tipo de variante o una opción que se desactivó, el formulario la sigue mostrando marcada "(inactiva)" y el producto se guarda sin cambiarla; un producto que se vende por metro se sigue vendiendo en fracciones. Lo que se bloquea es **elegirla** para un producto nuevo o cambiar otro producto a ella. *Configuración* avisa cuántos productos usan una unidad antes de desactivarla.
+
+**Se cambia en** *Configuración → Negocio*, en tres tarjetas con su propio botón de guardar: *Colores del negocio* (`PUT /configuracion/apariencia`), *Moneda, fechas e impuesto* (`PUT /configuracion/regional`) y *Catálogo del negocio* (`PUT /configuracion/catalogo`). Las tres exigen `configuracion.editar`, aceptan solo valores del catálogo y quedan en la auditoría.
+
+**Para agregar una opción** (otra unidad, otra paleta) basta con añadirla a su lista en el archivo. Una categoría de gasto o un tipo de ingreso nuevo necesita, además, su cuenta en el plan de cuentas (`gasto_<clave>` o `ingreso_<clave>`), agregada en una migración como la 08; las funciones contables no se tocan. Una prueba compara las dos listas para que el catálogo nunca ofrezca algo que la base rechazaría.
+
+## Asistente de configuración inicial (onboarding)
+
+**A quién se le muestra (decisión D-09).** A la persona con `usuarios.onboarding_pendiente = TRUE` mientras `configuracion_negocio.onboarding_completado = FALSE`. En una instalación con el seed de producción solo `admin` tiene la marca; `soporte` no. Las instalaciones que ya existían no lo ven: ningún usuario tiene la marca. `utils/permisos.js` lo resuelve como `debeOnboarding` al cargar la sesión (la misma consulta lee las dos marcas).
+
+**Bloqueo.** En `middlewares/auth.js`, después del cambio de contraseña obligatorio: cualquier ruta que no sea `/onboarding…` o `/logout` redirige a `/onboarding`, y las de datos responden 403 con `{ onboarding: true }`. Primero se cambia la contraseña temporal y después se configura.
+
+| Paso | Qué pide | Validación | Ruta |
+|---|---|---|---|
+| 1. Bienvenida | Nada: explica los cinco pasos | — | `POST /onboarding/1` |
+| 2. Datos del negocio | RTN, dirección, teléfono y correo, los cuatro obligatorios | En vivo en el navegador y otra vez en el servidor: RTN de 14 dígitos (se guarda sin guiones), dirección de al menos 5 caracteres, teléfono con al menos 8 dígitos y correo con formato válido | `POST /onboarding/2` |
+| 3. Logo | Una imagen PNG o JPEG | Vista previa y comprobación en el navegador; el servidor lee la cabecera del archivo (no se fía de la extensión) y exige al menos 200 × 200 píxeles y hasta 3 MB. Se sube a Supabase Storage con el mismo servicio de las fotos de producto y el logo anterior se borra | `POST /onboarding/3` |
+| 4. Colores | Una de las diez paletas | Solo se acepta un identificador del catálogo. Al elegir, el asistente cambia de color en vivo | `POST /onboarding/4` |
+| 5. Unidades y movimientos *(opcional)* | Las unidades que usa, con "unidad" y "par" ya marcadas para JCL Sport, y las categorías de gasto y tipos de ingreso que registra (servicios e impuestos vienen marcados; comisiones, no) | Al menos una de cada lista, todas del catálogo. "Saltar por ahora" no cambia nada | `POST /onboarding/5` |
+| 6. Primer vendedor *(opcional)* | Nombre, usuario y contraseña inicial, con el componente de contraseñas | La política la valida `crear_usuario`; se le exige cambiarla al entrar. "Saltar y completar" cierra sin crearlo | `POST /onboarding/6` |
+
+**Reglas.** Cada paso se guarda al continuar y `onboarding_paso` recuerda el más avanzado: si se sale, al volver retoma ahí. No se pueden saltar pasos (ni con `?paso=` ni enviando el formulario de uno posterior) y solo se puede volver **un** paso atrás. Si algo no es válido, el mismo paso lo explica y conserva lo escrito.
+
+**Cierre.** El último paso llama a `completar_onboarding(usuario, ip)`, que comprueba **en la base** que estén el RTN, la dirección, el teléfono, el correo, un logo propio y la paleta. Si falta algo lanza un error; si está todo, marca el negocio como configurado con su fecha, apaga la marca de los usuarios y lo registra en la auditoría. Desde entonces el asistente no vuelve a aparecer, tampoco si se restablece una contraseña.
+
+**Diseño.** Usa un layout propio (`views/layouts/onboarding.ejs`), sin menú lateral: encabezado con el logo y el nombre del negocio, barra de avance "Paso X de 6", una tarjeta por paso y el botón principal a la derecha. El encabezado, la barra y los botones usan las variables CSS de la paleta, por eso cambian al instante al probar una en el paso 4.
+
+## Política de contraseñas
+
+**Quien decide es la base de datos.** `validar_contrasena` exige de 8 a 72 caracteres (72 bytes, el límite de bcrypt), al menos una letra y un número, y que no sea igual al nombre de usuario. La contraseña se guarda con bcrypt y una restricción `CHECK` impide guardar otra cosa. Nada de esto cambió en la Fase 6.5.
+
+**El componente** (decisión D-10) está en `views/partials/clave.ejs` y `public/js/contrasena.js` y se usa en *Cambiar contraseña*, *Recuperar acceso*, *Configuración → Usuarios* (al crear) y el paso 6 del asistente. Tiene:
+
+- La contraseña con un botón para mostrarla u ocultarla (con `aria-pressed`).
+- La lista de requisitos, exactamente los de la base, con ✓ en verde o ✗ en gris que cambian mientras se escribe; cada uno dice "cumplido" o "pendiente" para los lectores de pantalla. Si se pasa de 72 bytes aparece ese requisito, sin cumplir.
+- Una barra de fortaleza: **Débil** (no cumple, o solo el largo mínimo), **Media** o **Fuerte**, según la longitud (8, 12 y 16 caracteres) y la mezcla de mayúsculas, minúsculas y símbolos. Orienta, no bloquea.
+- La confirmación, que avisa en verde o en rojo si coincide.
+- El botón de guardar, deshabilitado hasta que se cumplen todos los requisitos y la confirmación coincide.
+
+Para comparar con el usuario, el componente lee el del formulario (en *Recuperar* y al crear usuarios se actualiza mientras se escribe) o el de la sesión en *Cambiar contraseña*. El servidor vuelve a validar todo: enviar una contraseña débil saltándose la pantalla se rechaza igual que antes.
+
+## Paletas de colores y contraste
+
+**Reglas** (decisión D-11, en `utils/colores.js`, con las fórmulas de WCAG 2.1 y la distancia CIE76):
+
+- Texto blanco sobre el color primario: contraste de al menos **4.5:1** (AA para texto normal).
+- Acento sobre el primario: al menos **3:1**, porque el acento se usa encima del primario (marca del menú activo, franja de la pantalla de acceso).
+- Distancia entre los dos: ΔE de al menos **25**; por debajo se verían como el mismo color.
+
+**Las diez paletas del catálogo**, medidas por el mismo código que usa el sistema:
+
+| Paleta | Primario | Acento | Texto blanco sobre el primario | Acento sobre el primario | Distancia ΔE | Acento sobre blanco | Acento fuerte (sobre blanco) |
+|---|---|---|---:|---:|---:|---:|---|
+| Azul Deportivo (`azul-deportivo`) | `#1E40AF` | `#F59E0B` | 8.72:1 | 4.06:1 | 143 | 2.15:1 | `#CA8208` (3.13:1) |
+| Verde Bosque (`verde-bosque`) | `#1B4332` | `#D8F3DC` | 11.08:1 | 9.38:1 | 68 | 1.18:1 | `#34A845` (3.07:1) |
+| Rojo Fuego (`rojo-fuego`) | `#991B1B` | `#FCD34D` | 8.31:1 | 5.76:1 | 80 | 1.44:1 | `#B78D03` (3.08:1) |
+| Morado Profundo (`morado-profundo`) | `#5B21B6` | `#F0ABFC` | 8.98:1 | 5.11:1 | 63 | 1.76:1 | `#E157F9` (3.03:1) |
+| Gris Ejecutivo (`gris-ejecutivo`) | `#1F2937` | `#60A5FA` | 14.68:1 | 5.77:1 | 64 | 2.54:1 | `#4294F9` (3.07:1) |
+| Naranja Cálido (`naranja-calido`) | `#C2410C` | `#FED7AA` | 5.18:1 | 3.83:1 | 65 | 1.35:1 | `#DE7803` (3.09:1) |
+| Verde Menta (`verde-menta`) | `#047857` | `#A7F3D0` | 5.48:1 | 4.28:1 | 46 | 1.28:1 | `#17A865` (3.08:1) |
+| Azul Noche (`azul-noche`) | `#0C4A6E` | `#38BDF8` | 9.46:1 | 4.42:1 | 46 | 2.14:1 | `#089EE1` (3.01:1) |
+| Vino Tinto (`vino-tinto`) | `#7F1D3F` | `#FBBF24` | 9.77:1 | 5.85:1 | 96 | 1.67:1 | `#C08B04` (3.03:1) |
+| Turquesa (`turquesa`) | `#115E59` | `#FDE68A` | 7.58:1 | 6.09:1 | 78 | 1.25:1 | `#B39003` (3.04:1) |
+
+**El acento fuerte.** Ninguno de los acentos llega a 3:1 sobre blanco (son tonos claros, pensados para ir sobre el primario). Por eso el sistema deriva de cada uno un **acento fuerte**: el mismo tono, oscurecido en HSL hasta alcanzar 3:1 sobre blanco (WCAG 1.4.11 para elementos gráficos). Se usa en los gráficos de *Estadísticas* y *Finanzas*, en el anillo de foco del teclado y en las barras finas sobre fondo claro. Las pruebas comprueban que conserva el tono del acento (menos de 3° de diferencia).
+
+**Cómo se aplican.** `views/partials/head.ejs` lee la paleta de `negocioActual` y emite dos cosas: la configuración de Tailwind (`primario`, `acento` y `acentofuerte`, de modo que `bg-primario`, `text-primario/80` y demás siguen funcionando) y las variables CSS `--primario`, `--acento`, `--acento-fuerte`, `--color-primario` y `--color-acento` en `:root`, que usan `public/css/app.css` y los gráficos. Lo incluyen todos los layouts, así que aplica a todas las pantallas, a la de acceso y a las de error. Los PDF (facturas, cotizaciones, reportes financieros y de estadísticas) reciben `negocio.colores.primario`. Si la base no tuviera el dato, valen los de la paleta de fábrica (Azul Deportivo).
+
+**Validación.** Del navegador solo llega el identificador de la paleta (`paleta_id`): el servidor busca sus colores en el catálogo y los guarda. Cualquier color suelto que se mande se ignora. La base, además, rechaza un color que no tenga la forma `#RRGGBB` (`chk_negocio_colores`), lo que impide inyectar CSS por ese camino. `evaluar(primario, acento)` devuelve las medidas y, si una regla falla, un mensaje para la persona ("Con este color primario, el texto blanco no sería legible…"). Queda listo para el selector libre de colores, que es deuda de una fase futura.
 
 ## Cómo funciona
 
@@ -404,8 +505,7 @@ Antes de entregarlo: cambiar las contraseñas de las cuentas de demostración (`
 
 ## Pendiente antes de producción real
 
-No hay protección CSRF, ni límite de intentos por IP, ni RLS. Las contraseñas ya se guardan con bcrypt desde la Fase 7. Es una
-decisión del proyecto para la primera versión. El bloque de RLS opcional está al final de `db/migrations/01_schema_inicial.sql`.
+No hay protección CSRF (la cookie es `HttpOnly` y `SameSite=Lax`, sin token por formulario), ni límite de intentos por IP (el bloqueo es por cuenta), ni RLS (solo el servidor habla con la base). Las contraseñas se guardan con bcrypt desde la Fase 7. El seed de producción del repositorio no trae una contraseña sino el marcador `CAMBIAR_ESTA_CLAVE_ANTES_DE_EJECUTAR`: se reemplaza en una copia local justo antes de ejecutarlo y nunca se sube, y la contraseña temporal se cambia en `admin` y `soporte` antes de dar a conocer la dirección de la instancia. El bloque de RLS opcional está al final de `db/migrations/01_schema_inicial.sql`.
 
 ## Recuperación de emergencia del administrador
 

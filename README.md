@@ -42,6 +42,7 @@ Una pyme hondureña puede tener un sistema contable y de ventas profesional sin 
 | 4 | Finanzas: partida doble, cuentas por cobrar y por pagar, ingresos, gastos, compras, libro diario y reportes en PDF | Hecha |
 | 5 | Inventario visual y alertas de stock | Absorbida por la Fase 2 (la lista de reposición pasa a la Fase 8) |
 | 6 | Estadísticas de ventas: indicadores, seis gráficos, insights automáticos, ranking de vendedores y reporte en PDF. Incluye el panel de inicio rediseñado y el menú de perfil | Hecha (se construyó después de la 7 para poder medir por vendedor y por rol) |
+| 6.5 | Preparación para producción: una instancia por cliente, catálogo del negocio configurable, asistente de configuración inicial, paletas de colores validadas y contraseñas con retroalimentación en vivo | Hecha |
 | 7 | Configuración, usuarios y roles con permisos granulares, contraseñas con bcrypt, bloqueo por intentos y auditoría | Hecha (se construyó antes que la 6, falta CSRF) |
 | 8 | Avisos automáticos por WhatsApp o correo, asistente virtual con IA y método de pago en el punto de venta | Pendiente (ideas por validar) |
 
@@ -76,6 +77,8 @@ flowchart LR
 
 Necesitas Node.js 20, Git y una cuenta gratuita de Supabase. Para publicarlo, una cuenta de Vercel.
 
+**Una instancia por cliente.** El mismo repositorio se despliega una vez por negocio: cada cliente tiene su propio proyecto de Vercel y su propia base de Supabase (decisión D-07). Hoy hay dos: `andeliza-dev.vercel.app`, para desarrollo y pruebas, y `andeliza-jcl-sport.vercel.app`, la producción de JCL Sport. Lo que cambia entre ellas son las variables de entorno, el contenido de `configuracion_negocio` y el seed con que se instaló. Los pasos de abajo sirven para los dos caminos; la diferencia está en el paso 2.
+
 1. **Clonar e instalar**
 
    ```bash
@@ -86,13 +89,11 @@ Necesitas Node.js 20, Git y una cuenta gratuita de Supabase. Para publicarlo, un
 
 2. **Crear la base de datos.** En un proyecto nuevo de Supabase abre *SQL Editor* y ejecuta en este orden:
 
-   1. `db/migrations/01_schema_inicial.sql`
-   2. `db/migrations/02_migracion_fase2.sql`
-   3. `db/migrations/03_migracion_fase3.sql`
-   4. `db/migrations/04_migracion_fase4.sql`
-   5. `db/migrations/05_migracion_fase7.sql`
-   6. `db/functions.sql`
-   7. `db/seed.sql` *(opcional: datos de ejemplo de una tienda deportiva)*
+   1. `db/migrations/01_schema_inicial.sql` a `db/migrations/08_migracion_fase6.5_categorias.sql` (ocho archivos, en orden)
+   2. `db/functions.sql`
+   3. Un solo seed, según el camino:
+      - **Desarrollo local:** `db/seed.sql`, con datos de prueba completos (productos, clientes, proveedores, ventas y contabilidad).
+      - **Instalación de un cliente:** `db/seed-produccion.sql`, con lo mínimo para que su administrador entre y configure el negocio con el asistente.
 
    Más detalles en [db/README.md](db/README.md).
 
@@ -119,6 +120,15 @@ Necesitas Node.js 20, Git y una cuenta gratuita de Supabase. Para publicarlo, un
 
 **Actualizar una base que ya está en la Fase 4.** La Fase 7 cambia las contraseñas a bcrypt y quita `usuarios.rol`, así que el orden importa: primero se hace `git push` y, cuando Vercel marque el despliegue como listo, se ejecutan, en este orden, `db/migrations/05_migracion_fase7.sql` y `db/functions.sql`. Los pasos, la verificación y qué hacer si algo falla están en [db/README.md](db/README.md).
 
+### Instalar la instancia de un cliente nuevo
+
+1. **Crea un proyecto nuevo de Supabase** para el cliente y ejecuta la cadena del paso 2 con `db/seed-produccion.sql`. El seed comprueba que la migración 07 y `functions.sql` ya estén, y no hace nada si la base ya tiene usuarios.
+2. **Crea un proyecto nuevo de Vercel** conectado a este mismo repositorio, con sus cuatro variables de entorno (la `DATABASE_URL` de la base nueva y un `SESSION_SECRET` propio).
+3. **La contraseña temporal.** `db/seed-produccion.sql` trae el marcador `CAMBIAR_ESTA_CLAVE_ANTES_DE_EJECUTAR`: reemplázalo en una copia local por una contraseña temporal antes de ejecutarlo (sin reemplazarlo, el seed se detiene). **Antes de compartir la dirección**, entra con `soporte` y con `admin` y cambia las dos. El sistema obliga a hacerlo.
+4. **El administrador del cliente** ve al entrar el asistente de configuración inicial: datos del negocio, logo, paleta de colores y, si quiere, unidades de venta y su primer vendedor. `soporte` no lo ve.
+
+El detalle está en [db/README.md](db/README.md#instalación-de-una-instancia-nueva-producción).
+
 ## Estructura del repositorio
 
 ```text
@@ -132,15 +142,16 @@ andeliza-erp/
 │   ├── referencia-tecnica.md  Pantallas, endpoints y reglas de negocio
 │   └── bitacora/              Una bitácora por semana
 ├── db/
-│   ├── migrations/            01 a 06: de la Fase 1 a la Fase 6 (la 05 es la Fase 7)
+│   ├── migrations/            01 a 08: de la Fase 1 a la Fase 6.5 (la 05 es la Fase 7)
 │   ├── functions.sql          Funciones y triggers (se puede repetir)
-│   ├── seed.sql               Datos de ejemplo
+│   ├── seed.sql               Datos de prueba (desarrollo)
+│   ├── seed-produccion.sql    Datos mínimos de una instancia nueva (producción)
 │   └── README.md              Orden de ejecución
 ├── github-issues/
 │   └── issues_mvp.md          Historias con criterios de aceptación
 ├── api/index.js               Entrada serverless de Vercel
 ├── app.js                     Aplicación Express
-├── client.config.js           Personalización por cliente
+├── client.config.js           Catálogo maestro: todas las opciones que existen
 ├── controllers/  models/  routes/  services/  middlewares/  utils/
 ├── views/                     Plantillas EJS (una carpeta por módulo, incluidas estadisticas/ y perfil/)
 ├── public/                    CSS y JavaScript del navegador
@@ -167,7 +178,8 @@ Andeliza ERP está en desarrollo y hay decisiones tomadas a propósito para avan
 - **El bloqueo por intentos fallidos es por cuenta, no por IP.** Un atacante que pruebe muchos usuarios distintos no se frena con eso. Las contraseñas ya se guardan con bcrypt, las cuentas se bloquean 15 minutos tras 5 intentos fallidos y todo acceso denegado queda en la auditoría (detalle en [docs/permisos.md](docs/permisos.md)).
 - **Sin RLS en Supabase.** Solo el servidor habla con la base, con credenciales en variables de entorno. La clave secreta nunca debe llegar al navegador.
 - **Tailwind se carga por CDN.** Es una decisión pragmática. Compilar el CSS para producción queda pendiente.
-- **Una instancia por cliente.** No hay multi-tenant: cada negocio tiene su propia base y su propio despliegue.
+- **Una instancia por cliente.** No hay tenencia compartida: cada negocio tiene su propia base y su propio despliegue, con el mismo código (decisión D-07).
+- **Contraseña temporal del seed de producción.** El repositorio solo trae un marcador; la contraseña se pone en una copia local al instalar y el sistema obliga a cambiarla. Hay que hacerlo antes de dar a conocer la dirección de la instancia.
 - **Facturación fiscal.** El sistema controla la numeración, el rango y la fecha límite del CAI e imprime los datos requeridos, pero no está certificado ni envía facturas al SAR. El formato debe validarse con un contador.
 - **Sin pruebas automatizadas dentro del repositorio.** Las baterías de prueba se corrieron durante el desarrollo y todavía no forman parte del repo.
 - **Pendientes de producto.** Métodos de pago, devoluciones y notas de crédito, y crédito fiscal sobre las compras.

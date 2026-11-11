@@ -31,7 +31,7 @@ Las historias se identifican como `HU-01`, `HU-02`, etc. y están escritas con c
 |---|---|---|---|---|---|---|---|
 | **Corte 1: Ventas e inventario** | HU-01 HU-02 HU-03 | HU-04 HU-05 HU-06 HU-07 | HU-08 HU-09 | HU-10 HU-11 HU-12 HU-13 HU-14 HU-15 | | | |
 | **Corte 2: Finanzas y contabilidad** | | | | | HU-16 HU-17 HU-18 HU-19 HU-20 | HU-21 HU-24 HU-25 | HU-22 HU-23 |
-| **Corte 3: Análisis, seguridad y automatización** | HU-28 HU-29 | HU-26 | | HU-31 | | | HU-27 HU-30 HU-32 |
+| **Corte 3: Análisis, seguridad y automatización** | HU-28 HU-29 HU-33 HU-34 HU-35 HU-36 | HU-26 | | HU-31 | | | HU-27 HU-30 HU-32 |
 
 ## Detalle por actividad
 
@@ -46,6 +46,10 @@ Estado: ✔ construida · ⬜ pendiente.
 | Limitar el acceso según el rol | **HU-03** Cada rol ve y usa solo lo que sus permisos permiten (el servidor responde 403) | ✔ | ✔ | 1 | ✔ |
 | Mantener los datos del negocio y los usuarios | **HU-28** Editar nombre, logo, RTN, CAI, usuarios, roles y permisos desde la interfaz | ✔ | — | 3 | ✔ |
 | Proteger las cuentas | **HU-29** Contraseñas con hash, recuperación, límite de intentos y protección CSRF *(CSRF pendiente)* | ✔ | ✔ | 3 | ◐ |
+| Poner en marcha el negocio | **HU-33** Asistente de configuración inicial: datos, logo, colores, unidades y primer vendedor | ✔ | — | 3 | ✔ |
+| Ajustar el sistema al negocio | **HU-34** Catálogo del negocio: activar las unidades, variantes, categorías y formato regional que usa | ✔ | — | 3 | ✔ |
+| Darle identidad al sistema | **HU-35** Elegir la paleta de colores del negocio, con contraste comprobado | ✔ | — | 3 | ✔ |
+| Elegir una contraseña segura | **HU-36** Ver en vivo si la contraseña cumple los requisitos y si coincide con su confirmación | ✔ | ✔ | 3 | ✔ |
 
 ### 2. Armar el catálogo y controlar el inventario
 
@@ -132,7 +136,7 @@ Con el Corte 2 se alcanza el **piso de app completa** descrito en [plan.md](plan
 
 **Meta:** reforzar el producto para uso real con usuarios no técnicos.
 
-**Historias:** HU-26 a HU-32.
+**Historias:** HU-26 a HU-36 (las cuatro últimas, HU-33 a HU-36, se construyeron en la semana 5, junto con la Fase 6, al preparar la salida a producción).
 
 **Al terminar, la persona puede:** ver alertas de stock y estadísticas, administrar su negocio, sus usuarios y los permisos de cada rol con contraseñas protegidas, recibir avisos automáticos de stock bajo y facturas vencidas, preguntarle al sistema con un asistente con IA y registrar el método de pago de cada venta.
 

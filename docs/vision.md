@@ -106,10 +106,10 @@ Son las suposiciones que, si resultan falsas, harían inviable el proyecto. Cada
 
 ### Fuera del alcance (definitivo en este proyecto)
 
-- Multi-tenant: cada negocio tiene su propia instancia.
+- Multi-tenant: cada negocio tiene su propia instancia (Vercel + Supabase), no hay tenencia compartida en una sola base. Esto es *single-tenant* por instancia: el mismo código se despliega una vez por cliente y cada despliegue tiene su base propia (decisión D-07 en `plan.md`). Lo que cambia de un negocio a otro (sus datos, su paleta, sus unidades y su formato regional) se guarda en su base y se configura desde la aplicación.
 - Envío o certificación electrónica de facturas ante el SAR.
 - Aplicación móvil nativa.
-- Varias sucursales o bodegas y varias monedas.
+- Varias sucursales o bodegas y varias monedas a la vez (cada negocio elige una sola moneda para mostrar sus montos).
 - Planillas y nómina.
 - Conciliación bancaria y pasarelas de pago.
 

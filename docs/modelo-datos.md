@@ -3,6 +3,10 @@
 Modelo relacional de Andeliza ERP en PostgreSQL (Supabase). Cubre las Fases 1 a 4: acceso y configuración, catálogo e inventario, clientes y proveedores, ventas y facturación, compras, cartera y contabilidad por partida doble.
 
 > Este documento se generó leyendo el catálogo de una base real creada con `db/migrations/01` a `05`, `db/functions.sql` y `db/seed.sql`, y a la que luego se le aplicó la migración `06` (solo agrega un índice y las 10 funciones de estadísticas, de solo lectura, sin cambiar ninguna tabla: por eso los totales de abajo no cambian), así que coincide con los scripts. La base tiene **26 tablas**, **2 vistas**, **237 columnas** y **37 claves foráneas**.
+>
+> **Fase 6.5 (migración 07).** Agrega 14 columnas a `configuracion_negocio` (formato regional, paleta, elecciones del catálogo maestro y asistente inicial), 1 a `usuarios` (`onboarding_pendiente`), 4 restricciones `CHECK` y la función `completar_onboarding`. No crea tablas: la base sigue teniendo 26 tablas y 2 vistas.
+>
+> **Migración 08.** Agrega tres filas al plan de cuentas (6106 `gasto_servicios`, 6107 `gasto_impuestos` y 4206 `ingreso_comisiones`) y vuelve a crear `registrar_gasto` y `registrar_ingreso` para que validen la categoría contra el plan de cuentas en lugar de una lista fija. No cambia el esquema.
 
 ## Decisiones de modelado
 
@@ -26,6 +30,7 @@ erDiagram
         varchar nombre
         varchar usuario UK
         bigint rol_id FK
+        boolean onboarding_pendiente
     }
     roles {
         bigint id PK
@@ -46,6 +51,9 @@ erDiagram
     configuracion_negocio {
         int id PK
         varchar nombre
+        varchar paleta_id
+        jsonb unidades_activas
+        boolean onboarding_completado
     }
     configuracion_fiscal {
         bigint id PK
@@ -247,7 +255,7 @@ Lectura: `||` indica "exactamente uno", `|o` "cero o uno" (la clave foránea adm
 | `permisos` | `id` | — | UNIQUE `modulo,accion` | Catálogo de permisos: un módulo y una acción (por ejemplo pos + crear). "ver_propias" es ver solo lo que uno mismo generó. |
 | `roles_permisos` | `rol_id, permiso_id` | `permiso_id` → `permisos` (CASCADE)<br>`rol_id` → `roles` (CASCADE) | — | Qué permisos tiene cada rol. Un trigger impide dar permisos de Configuración a otro rol que no sea admin. |
 | `recuperacion_contrasena` | `id` | `usuario_id` → `usuarios` (CASCADE) | — | Códigos temporales de recuperación de contraseña (un solo uso, 30 minutos). Guarda el hash del código, no el código. |
-| `configuracion_negocio` | `id` | — | CHECK `(id = 1)` | Datos del negocio y contadores internos. Tabla de una sola fila. |
+| `configuracion_negocio` | `id` | — | CHECK `(id = 1)` | Datos del negocio, contadores internos y, desde la Fase 6.5, su formato regional, su paleta, lo que eligió del catálogo maestro y el estado del asistente inicial. Tabla de una sola fila. |
 | `configuracion_fiscal` | `id` | — | UNIQUE `activo (solo donde activo)`<br>CHECK `((numero_actual >= (rango_inicio - 1)) AND (numero_actual <= rango_fin))`<br>CHECK `(rango_fin >= rango_inicio)` | CAI del SAR con su rango autorizado, fecha límite y tasa de impuesto. |
 | `codigos_temporales` | `id` | — | — | Tabla de la Fase 1 que hoy no usa ninguna pantalla: códigos temporales de un solo uso con vencimiento. No es la de recuperación de contraseña (esa es recuperacion_contrasena). |
 | `auditoria` | `id` | — | — | Bitácora de solo agregar: quién hizo qué, cuándo y desde dónde (inicios de sesión, usuarios, roles, finanzas, ventas). No se modifica ni se borra. |
@@ -296,6 +304,7 @@ Cuentas de acceso. Cada una tiene un rol (tabla roles); la contraseña se guarda
 | `creado_en` | `timestamptz` | No | `now()` | — | Fecha y hora de creación. |
 | `rol_id` | `bigint` | No | — | FK → roles(id), ON DELETE NO ACTION | Rol de la cuenta (referencia a roles). |
 | `debe_cambiar_contrasena` | `boolean` | No | `false` | — | TRUE obliga a cambiar la contraseña en el primer inicio de sesión. |
+| `onboarding_pendiente` | `boolean` | No | `false` | — | TRUE = a esta persona le toca el asistente de configuración inicial (Fase 6.5). En una instalación nueva solo lo tiene el administrador del cliente; `completar_onboarding` lo apaga. |
 | `intentos_fallidos` | `int` | No | `0` | — | Intentos fallidos seguidos de inicio de sesión (5 bloquean la cuenta). |
 | `bloqueado_hasta` | `timestamptz` | Sí | — | — | Hasta cuándo está bloqueada la cuenta por intentos fallidos. |
 | `sesion_version` | `int` | No | `1` | — | Sube al desactivar la cuenta o cambiar la contraseña; cierra todas las sesiones abiertas de la persona. |
@@ -358,7 +367,7 @@ Códigos temporales de recuperación de contraseña (un solo uso, 30 minutos). G
 
 ### `configuracion_negocio`
 
-Datos del negocio y contadores internos. Tabla de una sola fila.
+Datos del negocio, contadores internos y, desde la Fase 6.5, su formato regional, su paleta, lo que eligió del catálogo maestro y el estado del asistente inicial. Tabla de una sola fila.
 
 | Columna | Tipo | Nulo | Por defecto | Restricciones | Descripción |
 |---|---|---|---|---|---|
@@ -375,8 +384,22 @@ Datos del negocio y contadores internos. Tabla de una sola fila.
 | `dias_credito` | `int` | No | `30` | — | Plazo de crédito que se supone cuando una deuda no trae vencimiento (30 por defecto). |
 | `contabilidad_inicio` | `date` | Sí | — | — | Día en que arrancó la contabilidad. NULL = todavía no se inició. |
 | `numero_partida_actual` | `int` | No | `0` | — | Último número de partida usado (correlativo sin saltos). |
+| `moneda` | `varchar(5)` | No | `'L'` | CHECK (no vacía) | Símbolo de la moneda en que se muestran los montos. Sale del catálogo maestro (`client.config.js`). |
+| `formato_fecha` | `varchar(20)` | No | `'DD/MM/YYYY'` | CHECK (no vacío) | Cómo se muestran las fechas en pantallas y documentos. |
+| `tasa_impuesto` | `numeric(5,4)` | No | `0.15` | CHECK 0 a 1 | Tasa que se aplica sin CAI activo (comprobante interno). Con CAI manda la tasa del CAI. |
+| `paleta_id` | `varchar(30)` | No | `'azul-deportivo'` | — | Paleta de colores elegida (catálogo maestro). |
+| `color_primario` | `varchar(7)` | No | `'#1E40AF'` | CHECK `#RRGGBB` | Color principal. Se copia desde la paleta del catálogo: nunca llega escrito desde el navegador. |
+| `color_acento` | `varchar(7)` | No | `'#F59E0B'` | CHECK `#RRGGBB` | Color de acento de la paleta. |
+| `unidades_activas` | `jsonb` | Sí | — | CHECK arreglo | Unidades de venta que usa el negocio, por ejemplo `["unidad","par"]`. NULL = las predeterminadas del catálogo. |
+| `tipos_variante_activos` | `jsonb` | Sí | — | CHECK arreglo | Tipos de variante activos (`["talla","equipo"]`). NULL = predeterminados. |
+| `opciones_variante_activas` | `jsonb` | Sí | — | CHECK objeto | Opciones sugeridas por tipo: `{"talla":["S","M"],"color":["Rojo"]}`. Un tipo ausente usa sus predeterminadas; una lista vacía es válida. |
+| `categorias_gasto_activas` | `jsonb` | Sí | — | CHECK arreglo | Categorías de gasto que se ofrecen al registrar un gasto. NULL = todas. |
+| `tipos_ingreso_activos` | `jsonb` | Sí | — | CHECK arreglo | Tipos de ingreso que se ofrecen al registrar un ingreso. NULL = todos. |
+| `onboarding_completado` | `boolean` | No | `false` | — | TRUE cuando el negocio terminó el asistente de configuración inicial. |
+| `onboarding_paso` | `smallint` | No | `1` | CHECK 1 a 6 | Paso más avanzado al que se llegó en el asistente (para retomarlo). |
+| `onboarding_completado_en` | `timestamptz` | Sí | — | — | Cuándo se completó el asistente. |
 
-Restricciones de la tabla: CHECK `(id = 1)`.
+Restricciones de la tabla: CHECK `(id = 1)`. Desde la migración 07 también `chk_negocio_colores` (los dos colores con forma `#RRGGBB`), `chk_negocio_regional` (tasa entre 0 y 1, moneda y formato no vacíos), `chk_negocio_catalogo` (cada elección es NULL o un arreglo; las opciones de variante, un objeto) y `chk_negocio_onboarding` (paso entre 1 y 6).
 
 ### `configuracion_fiscal`
 
@@ -608,7 +631,7 @@ Ingresos varios (intereses, alquileres, servicios...) cobrados o por cobrar.
 | Columna | Tipo | Nulo | Por defecto | Restricciones | Descripción |
 |---|---|---|---|---|---|
 | `id` | `bigint` | No | `nextval('ingresos_id_seq'::regclass)` | PK | Identificador. |
-| `tipo` | `varchar(30)` | No | `'otros'` | — | intereses, alquileres, servicios, inversiones u otros. |
+| `tipo` | `varchar(30)` | No | `'otros'` | — | Clave del tipo: intereses, alquileres, servicios, inversiones, comisiones u otros. Es válido si existe su cuenta `ingreso_<tipo>` activa (migración 08). |
 | `descripcion` | `varchar(255)` | No | — | — | Descripción. |
 | `monto` | `numeric(18,2)` | No | — | — | Monto con 2 decimales. |
 | `fecha` | `date` | No | `CURRENT_DATE` | — | Fecha del documento (hora del negocio). |
@@ -631,7 +654,7 @@ Gastos del negocio, pagados o por pagar.
 | Columna | Tipo | Nulo | Por defecto | Restricciones | Descripción |
 |---|---|---|---|---|---|
 | `id` | `bigint` | No | `nextval('gastos_id_seq'::regclass)` | PK | Identificador. |
-| `categoria` | `varchar(30)` | No | `'otros'` | — | logistica, marketing, operativos, mantenimiento u otros. |
+| `categoria` | `varchar(30)` | No | `'otros'` | — | Clave de la categoría: logistica, marketing, operativos, mantenimiento, servicios, impuestos u otros. Es válida si existe su cuenta `gasto_<categoria>` activa (migración 08). |
 | `descripcion` | `varchar(255)` | No | — | — | Descripción. |
 | `monto` | `numeric(18,2)` | No | — | — | Monto con 2 decimales. |
 | `fecha` | `date` | No | `CURRENT_DATE` | — | Fecha del documento (hora del negocio). |
@@ -772,6 +795,7 @@ Las reglas críticas viven en la base de datos para que cada operación sea ató
 | `cambiar_contrasena` | La persona cambia su propia contraseña (pide la actual). |
 | `cambiar_estado_usuario` | Activa o desactiva una cuenta; al desactivar cierra sus sesiones. |
 | `completar_auditoria` | Trigger: completa el nombre de quien actuó y una descripción. |
+| `completar_onboarding` | Cierra el asistente de configuración inicial (Fase 6.5): exige RTN, dirección, teléfono, correo, un logo propio y la paleta elegida; marca el negocio como configurado, apaga la marca de los usuarios y lo registra en la auditoría. |
 | `conciliar_inventario` | Iguala el inventario del libro con las existencias. |
 | `contabilizar_venta` | Genera la partida de una venta (la llama crear_venta). |
 | `crear_partida` | Único camino para escribir en el libro diario: valida y numera la partida. |
@@ -802,8 +826,8 @@ Las reglas críticas viven en la base de datos para que cada operación sea ató
 | `registrar_abono_cliente` | Registra un abono parcial o total y baja la deuda. |
 | `registrar_auditoria` | Anota una acción en la auditoría (la usan las demás funciones y el servidor). |
 | `registrar_compra` | Registra una compra: sube stock, recalcula el costo promedio y genera la partida. |
-| `registrar_gasto` | Registra un gasto (pagado o por pagar) con su partida. |
-| `registrar_ingreso` | Registra un ingreso (cobrado o por cobrar) con su partida. |
+| `registrar_gasto` | Registra un gasto (pagado o por pagar) con su partida. Acepta cualquier categoría que tenga su cuenta `gasto_<categoria>` activa en el plan de cuentas. |
+| `registrar_ingreso` | Registra un ingreso (cobrado o por cobrar) con su partida. Acepta cualquier tipo que tenga su cuenta `ingreso_<tipo>` activa en el plan de cuentas. |
 | `registrar_pago_proveedor` | Registra un pago parcial o total a un proveedor. |
 | `registrar_partida_manual` | Registra un asiento manual. |
 | `registrar_saldo_inicial` | Registra el saldo inicial de Caja o Bancos contra capital. |

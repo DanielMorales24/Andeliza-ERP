@@ -1041,3 +1041,135 @@ Característica: Asistente virtual
 ```
 
 **Por definir:** el modelo de IA y su costo. Cada respuesta debe salir de consultas a la base de datos y no de la memoria del modelo. Se apoya en los roles y permisos de la Fase 7: el asistente actúa con los permisos de quien pregunta.
+
+---
+
+## HU-33 · Configurar el negocio la primera vez
+
+**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `rol-admin` · **Estado:** construida (Fase 6.5)
+
+**Historia:** Como administradora de un negocio que acaba de recibir su sistema, quiero que me guíe paso a paso para dejarlo listo, para no empezar a vender con facturas sin RTN ni logo.
+
+```gherkin
+# language: es
+Característica: Asistente de configuración inicial
+
+  Escenario: Primer inicio de sesión
+    Dado una instancia recién instalada con el seed de producción
+    Cuando el administrador entra y cambia su contraseña temporal
+    Entonces ve el asistente en el paso 1 de 6 y no puede abrir ninguna otra pantalla
+
+  Escenario: Los pasos esenciales no se pueden saltar
+    Dado que estoy en el paso de datos del negocio
+    Cuando dejo el RTN con 13 dígitos
+    Entonces el botón Continuar sigue deshabilitado y el servidor también lo rechaza
+
+  Escenario: Los pasos opcionales sí
+    Dado que completé los datos, el logo y la paleta
+    Cuando pulso "Saltar por ahora" y luego "Saltar y completar"
+    Entonces llego al panel de inicio y el asistente no vuelve a aparecer
+
+  Escenario: El usuario de soporte no lo ve
+    Dado que el negocio todavía no está configurado
+    Cuando entra el usuario soporte
+    Entonces llega directo al panel
+```
+
+---
+
+## HU-34 · Elegir del catálogo lo que usa mi negocio
+
+**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `rol-admin` · **Estado:** construida (Fase 6.5)
+
+**Historia:** Como administradora, quiero activar las unidades, variantes, categorías y el formato regional que usa mi negocio, para que los formularios solo me ofrezcan lo que necesito sin pedirle cambios al programador.
+
+```gherkin
+# language: es
+Característica: Catálogo del negocio
+
+  Escenario: Activar unidades nuevas
+    Dado que en Configuración activo "metro" y "yarda"
+    Cuando creo un producto nuevo
+    Entonces el selector de unidades las incluye
+
+  Escenario: Un producto no pierde su unidad
+    Dado un producto que se vende por metro
+    Cuando desactivo "metro" y edito ese producto
+    Entonces su unidad sigue elegida, marcada "(inactiva)", y se guarda sin cambiarla
+
+  Escenario: No se puede elegir lo desactivado
+    Dado que "metro" está desactivada
+    Cuando intento crear un producto nuevo por metro
+    Entonces el servidor lo rechaza con un mensaje claro
+
+  Escenario: Ventas en fracciones
+    Dado un producto que se vende por metro
+    Cuando cobro 1.5 en el punto de venta
+    Entonces la venta se registra con 1.5
+
+  Escenario: Categorías de gasto con su cuenta contable
+    Dado que el negocio tiene activa la categoría "servicios"
+    Cuando registro el pago de la luz
+    Entonces la partida carga la cuenta 6106 Servicios públicos y abona Caja
+
+  Escenario: Activar un tipo de ingreso opcional
+    Dado que "comisiones" no está activa
+    Cuando la activo en Configuración y registro una comisión cobrada
+    Entonces la partida abona la cuenta 4206 Comisiones ganadas
+```
+
+---
+
+## HU-35 · Darle al sistema los colores de mi negocio
+
+**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `rol-admin` · **Estado:** construida (Fase 6.5)
+
+**Historia:** Como administradora, quiero elegir una paleta de colores para mi negocio, para que el sistema y mis documentos tengan su identidad sin que se vuelvan ilegibles.
+
+```gherkin
+# language: es
+Característica: Paleta de colores
+
+  Escenario: Vista previa en vivo
+    Dado que estoy eligiendo la paleta
+    Cuando marco una
+    Entonces el encabezado, el botón principal y la vista previa cambian al instante
+
+  Escenario: La paleta se aplica en todo
+    Dado que guardé la paleta Rojo Fuego
+    Cuando abro cualquier pantalla, el acceso o una factura en PDF
+    Entonces usan sus colores
+
+  Escenario: Solo paletas validadas
+    Dado que alguien envía un color propio en lugar de una paleta
+    Cuando el servidor guarda la elección
+    Entonces ignora ese color y usa solo los de la paleta del catálogo
+```
+
+---
+
+## HU-36 · Saber al instante si mi contraseña sirve
+
+**Milestone:** Corte 3 · **Etiquetas:** `corte-3` `feature` `rol-admin` `rol-vendedor` · **Estado:** construida (Fase 6.5)
+
+**Historia:** Como cualquier persona que usa el sistema, quiero ver mientras escribo qué requisitos cumple mi contraseña nueva y si la confirmación coincide, para no enterarme del error hasta después de enviarla.
+
+```gherkin
+# language: es
+Característica: Contraseñas con retroalimentación en vivo
+
+  Escenario: Requisitos que se marcan solos
+    Dado que escribo "abc"
+    Cuando sigo escribiendo hasta "abc12345"
+    Entonces los cuatro requisitos pasan de ✗ a ✓ y al borrar un carácter el del largo vuelve a ✗
+
+  Escenario: Confirmación
+    Dado una contraseña que cumple los requisitos
+    Cuando la confirmación no coincide
+    Entonces lo veo en rojo y el botón Guardar sigue deshabilitado
+
+  Escenario: El servidor sigue validando
+    Dado que alguien envía una contraseña sin números saltándose la pantalla
+    Cuando el servidor la recibe
+    Entonces la rechaza con el mismo mensaje de siempre
+```

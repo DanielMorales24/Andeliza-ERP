@@ -98,6 +98,8 @@ Interpretación de cada rol:
 | `/login`, `/logout`, `/recuperar` | Públicas (la recuperación exige el código del administrador) |
 | `GET /perfil`, `GET /perfil/actividad` | Cualquier usuario con sesión, sin permiso de módulo (es la información de la propia persona) |
 | `/cambiar-contrasena` | Cualquier usuario con sesión, y es la única ruta (además de salir) que se permite con una contraseña provisional |
+| `PUT /configuracion/apariencia`, `PUT /configuracion/regional`, `PUT /configuracion/catalogo` (Fase 6.5: paleta, formato regional y catálogo del negocio) | `configuracion.editar` |
+| `GET /onboarding`, `POST /onboarding/1` a `/onboarding/6` (asistente de configuración inicial) | Solo la persona que lo tiene pendiente mientras el negocio no lo haya completado. Cualquier otra es devuelta a su inicio |
 
 ## Reglas de propiedad del dato
 
@@ -111,6 +113,8 @@ Además de "qué módulos puedo usar", hay reglas sobre **de quién son los dato
 | **Mi actividad (`/perfil/actividad`) solo muestra lo que la propia persona hizo.** | La consulta usa el id de la sesión (`WHERE usuario_id = <él>`) y no acepta un usuario por parámetro: pedir la actividad de otra persona devuelve siempre la propia. |
 | **Estadísticas es una vista gerencial.** | Quien tiene `estadisticas.ver` ve las cifras de todo el equipo, incluido el ranking de vendedores. El aviso de cuentas por cobrar vencidas solo se calcula si además tiene `finanzas.ver`. |
 | **Marcar una factura como pagada** | Solo con `facturas.editar` (admin y supervisor). El vendedor y el contador no. |
+| **Mientras el asistente inicial está pendiente, solo se puede usar el asistente.** | `requireAuth` redirige a `/onboarding` cualquier ruta que no sea `/onboarding` o `/logout`; las rutas de datos responden 403 con `onboarding: true`. Se aplica después del cambio de contraseña obligatorio, y cerrarlo lo decide la base (`completar_onboarding`). |
+| **Las elecciones del catálogo y la paleta solo aceptan valores del catálogo maestro.** | El servidor compara cada valor con `client.config.js` antes de guardar; de una paleta solo se acepta el identificador y los colores se copian del catálogo. La base rechaza colores que no sean `#RRGGBB`. |
 
 ## Cuentas de demostración
 
