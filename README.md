@@ -2,7 +2,7 @@
 
 Sistema de gestión administrativo para pymes hondureñas. Ventas, inventario, clientes, proveedores, finanzas y facturación con CAI del SAR o facturación interna para negocios que todavía no están registrados. Todo desde el navegador.
 
-**URL de la aplicación:** https://andeliza-qem6mfr7e-erp-0cc5.vercel.app/ 
+**URL de la aplicación:** https://andeliza-erp.vercel.app/
 
 **Token de acceso:** `LEARN-CAP-0F81B0C6`
 
@@ -93,7 +93,9 @@ Necesitas Node.js 20, Git y una cuenta gratuita de Supabase. Para publicarlo, un
    2. `db/functions.sql`
    3. Un solo seed, según el camino:
       - **Desarrollo local:** `db/seed.sql`, con datos de prueba completos (productos, clientes, proveedores, ventas y contabilidad).
-      - **Instalación de un cliente:** `db/seed-produccion.sql`, con lo mínimo para que su administrador entre y configure el negocio con el asistente.
+      - **Instalación de un cliente:** `db/seed-produccion_*.sql`, con lo mínimo para que su administrador entre y configure el negocio con el asistente. En `db/` hay tres para elegir:
+        - `db/seed-produccion.sql`: plantilla estándar (cualquier rubro).
+        - `db/seed-produccion_<cliente>.sql`: ejemplos reales de negocios.
 
    Más detalles en [db/README.md](db/README.md).
 
