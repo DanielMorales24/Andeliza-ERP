@@ -226,3 +226,52 @@ Casos que sirven para la demostración:
 - **Reproducible a mano:** entrando como administrador en desarrollo (estadísticas, panel y perfil) y, en una instancia nueva con el seed de producción, el asistente completo.
 - **PDF:** el reporte de estadísticas (`/estadisticas/reporte.pdf`, cuya exportación queda en *Configuración → Auditoría*) se rasterizó para corregir cinco defectos de maquetación. La factura y el reporte de estadísticas se rasterizaron con la paleta Rojo Fuego: sin rastro del azul de fábrica y con el logo subido en el asistente.
 - **Pruebas:** 514 comprobaciones (272 de la Fase 6 y 242 de la Fase 6.5) y las dos comparaciones diferenciales de 546 respuestas, resumidas arriba.
+
+## Pruebas con usuarios reales (13 de noviembre de 2026)
+
+Con el MVP en producción en sus dos instancias, se hicieron las primeras sesiones de prueba con usuarias reales: una por negocio, individuales, en el local de cada una, con su propio equipo y su propia instancia. El informe completo está en `docs/pruebas-usuarios.md`.
+
+**Participantes.** P1 es la contadora de la tienda deportiva y administradora de su instancia (comprobante interno, sin SAR). P2 es la representante de la floristería y administradora de la suya (inscrita en el SAR). Las dos habían configurado su negocio con el asistente inicial y usado la app por su cuenta, sin capacitación formal.
+
+**Qué se probó.** Una hoja de campo por cliente, en lenguaje de usuario y sin siglas, con cuatro tareas:
+
+1. Una venta real del día, cronometrada.
+2. La revisión contable de esa venta (P1) o cuánto le deben sus clientes (P2).
+3. Un caso fuera de lo normal: un producto que no venden y más unidades de las que hay.
+4. Un producto compuesto: cotizar 11 uniformes o crear un ramo.
+
+La sesión cerró con preguntas abiertas, la pregunta de la contadora (P1) y la de la conexión (P2). Como la app no anula ventas, la venta cronometrada fue siempre una venta real.
+
+**Resultados.**
+
+| | P1 | P2 |
+|---|---|---|
+| Venta real | Sin ayuda, **1:05** | Sin ayuda, **1:13** (con comprobante interno) |
+| Tarea 2 | La venta en la contabilidad: sin ayuda, 0:20 | Cuánto le deben: sin ayuda, 0:36 |
+| Caso fuera de lo normal | Entendió los dos avisos | Entendió los dos avisos |
+| Producto compuesto | Sin ayuda, 0:46 (tuvo que crear el kit) | Con esfuerzo, 2:47 |
+| Duración de la sesión | 25 min | 35 min |
+
+Hubo cinco hallazgos, ninguno bloqueante. Uno es grave: la venta no registra el medio de pago y toda venta cobrada se contabiliza en Caja. Los otros cuatro son menores: los productos compuestos generan dudas en las dos sesiones, la partida no se ve desde la factura, en el primer uso no es obvio que se toca el producto para agregarlo, y para saber si un producto existe buscan en Inventario.
+
+**Decisión sobre las hipótesis.**
+
+- **H1, se sostiene.** Las dos registraron la venta sin ayuda y en menos de dos minutos. Ambas usaron el comprobante interno, así que la venta con CAI queda por observar.
+- **H2, se sostiene con evidencia limitada.** P2 reporta un corte cada cuatro meses, de una hora (unos 3.5 min/semana). Es un solo testimonio, sin medición.
+- **H3, se ajusta.** La contadora valida las partidas automáticas, el libro diario y los reportes, pero pidió que la partida dependa del medio de pago. Nueva formulación: los reportes son aceptables siempre que la partida refleje el medio de pago.
+
+**Bloqueantes.** No se encontraron, así que no hubo correcciones antes del release.
+
+**Issues que salen de las pruebas.**
+
+- Método de pago en el punto de venta y partida según el medio (grave, semana 6).
+- Productos compuestos más claros (semana 7).
+- Ver la partida desde la factura (semana 8).
+- Pista de primer uso en el punto de venta (semana 9).
+- Observar la primera venta con CAI (validación, semana 6).
+
+**Qué aprendimos.**
+
+- Fijar antes de la sesión qué cuenta como «se sostiene» evitó acomodar la decisión a lo esperado. La contadora dijo que el libro le sirve, pero por la regla definida antes, su pedido del medio de pago ajusta H3.
+- Usar una venta real como tarea cronometrada da un dato más honesto que una venta de prueba y no ensucia la contabilidad.
+- El hallazgo más valioso no salió de una tarea fallida: el pedido del medio de pago apareció en una venta que se completó sin problemas.
