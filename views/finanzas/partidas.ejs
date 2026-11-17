@@ -15,6 +15,11 @@
 
   <!-- ================= LIBRO DIARIO ================= -->
   <section x-show="vista === 'libro'" aria-label="Libro diario">
+    <div x-show="filtroVenta" x-cloak data-filtro-venta role="status"
+         class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-primario/30 bg-white px-4 py-3 text-sm">
+      <span>Mostrando los asientos de la factura <span class="font-medium tabular-nums" x-text="filtroVenta && filtroVenta.numero"></span>: la venta, sus cobros<span x-show="filtroVenta && filtroVenta.anulada"> y la anulación</span>.</span>
+      <button type="button" class="btn-texto ml-auto" @click="quitarFiltroVenta()">Ver todos los asientos</button>
+    </div>
     <div class="mt-3 flex flex-wrap items-end gap-3">
       <div class="relative min-w-[200px] flex-1 sm:max-w-xs">
         <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>

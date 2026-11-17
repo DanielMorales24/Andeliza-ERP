@@ -141,9 +141,18 @@ document.addEventListener('alpine:init', function () {
       quitarComponente(i) { this.componentes.splice(i, 1); },
       get costoComponentes() { return this.componentes.reduce((s, c) => s + (Number(c.precio_compra) || 0) * (Number(c.cantidad) || 0), 0); },
       usarCostoComponentes() { this.f.precio_compra = Math.round(this.costoComponentes * 100) / 100; },
+      // Cuántos kits alcanza a armar un componente con su stock
+      kitsDe(c) { return Number(c.cantidad) > 0 ? Math.floor((Number(c.stock) || 0) / Number(c.cantidad)) : 0; },
       get kitsPosibles() {
         if (!this.componentes.length) return 0;
-        return Math.min.apply(null, this.componentes.map((c) => (Number(c.cantidad) > 0 ? Math.floor((Number(c.stock) || 0) / Number(c.cantidad)) : 0)));
+        return Math.min.apply(null, this.componentes.map((c) => this.kitsDe(c)));
+      },
+      // El componente que se acaba primero (el que decide cuántos kits se pueden armar)
+      get limitanteKit() {
+        if (!this.componentes.length) return '';
+        let menor = null;
+        this.componentes.forEach((c) => { if (menor === null || this.kitsDe(c) < this.kitsDe(menor)) menor = c; });
+        return menor ? menor.nombre : '';
       },
 
       // ---------- Imagen ----------

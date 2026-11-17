@@ -10,7 +10,7 @@ const Negocio = require('./negocio');
 async function obtener(id) {
   const { rows } = await db.query(
     `SELECT v.id, v.numero_factura, v.tipo_documento, v.estado, v.subtotal, v.impuesto, v.total,
-            v.creado_en, v.usuario_id, v.cliente_id, v.fecha_vencimiento,
+            v.creado_en, v.usuario_id, v.cliente_id, v.fecha_vencimiento, v.metodo_pago,
             c.nombre AS cliente_nombre, c.rtn AS cliente_rtn, c.telefono AS cliente_telefono,
             c.direccion AS cliente_direccion, c.correo AS cliente_correo,
             u.nombre AS vendedor
@@ -42,7 +42,7 @@ async function idPorClave(clave) {
 // nunca con lo que diga el navegador.
 //   items: [{ producto_id, variante_id|null, cantidad }]  (ya validados y sin repetidos)
 //   clave: identificador del cobro; si se repite devuelve la venta que ya existe
-async function crear({ clienteId, usuarioId, items, pendiente, clave, fechaVencimiento }) {
+async function crear({ clienteId, usuarioId, items, pendiente, clave, fechaVencimiento, metodoPago = null }) {
   if (clave) {
     const existente = await idPorClave(clave);
     if (existente) return { venta: await obtener(existente), repetida: true };
@@ -85,8 +85,8 @@ async function crear({ clienteId, usuarioId, items, pendiente, clave, fechaVenci
   try {
     const resultado = await db.transaccion(async (cx) => {
       const r = await cx.query(
-        'SELECT crear_venta($1, $2, $3::jsonb, $4, $5, $6, NULL, $7) AS resultado',
-        [clienteId, usuarioId, JSON.stringify(lineas), t.subtotal, t.impuesto, t.total, pendiente ? 'P' : 'C']
+        'SELECT crear_venta($1, $2, $3::jsonb, $4, $5, $6, NULL, $7, $8) AS resultado',
+        [clienteId, usuarioId, JSON.stringify(lineas), t.subtotal, t.impuesto, t.total, pendiente ? 'P' : 'C', pendiente ? null : metodoPago]
       );
       const v = r.rows[0].resultado;
       if (clave) await cx.query('UPDATE ventas SET clave_cliente = $1 WHERE id = $2', [clave, v.venta_id]);
@@ -186,6 +186,8 @@ async function listar(filtros) {
 
   const filas = (await db.query(
     `SELECT v.id, v.numero_factura, v.tipo_documento, v.estado, v.subtotal, v.impuesto, v.total, v.creado_en, v.fecha_vencimiento,
+            v.metodo_pago,
+            EXISTS (SELECT 1 FROM partidas p WHERE p.origen_tipo = 'venta' AND p.origen_id = v.id) AS tiene_partida,
             CASE WHEN v.estado = 'P'
                  THEN ROUND(v.total - COALESCE((SELECT SUM(a.monto) FROM abonos_clientes a WHERE a.venta_id = v.id AND NOT a.anulado), 0), 2)
                  ELSE 0 END AS saldo,
@@ -199,25 +201,32 @@ async function listar(filtros) {
   return { filas: hayMas ? filas.slice(0, limite) : filas, hayMas, resumen };
 }
 
-// Cobra el saldo que falta de una factura pendiente. Con la contabilidad iniciada registra un abono
-// (entra a Caja y baja Cuentas por cobrar); si no, solo cambia el estado.
+// Cobra el saldo que falta de una factura pendiente con el método que diga quien cobra.
+// Con la contabilidad iniciada registra un abono (el efectivo entra a Caja; tarjeta, transferencia
+// y cheque, a Bancos) y baja Cuentas por cobrar; si no, solo cambia el estado. En los dos casos
+// guarda el método en la venta si todavía no tenía uno (era una venta al crédito).
 // Devuelve 'pagada', 'ya_estaba_pagada' o null si no existe.
-async function marcarPagada(id, usuarioId) {
+async function marcarPagada(id, usuarioId, metodo = 'efectivo') {
   const inicio = (await db.query('SELECT contabilidad_inicio FROM configuracion_negocio WHERE id = 1')).rows[0];
   if (inicio && inicio.contabilidad_inicio) {
     const v = (await db.query('SELECT estado FROM ventas WHERE id = $1', [id])).rows[0];
     if (!v) return null;
     if (v.estado === 'C') return 'ya_estaba_pagada';
+    const cuenta = (await db.query('SELECT cuenta_metodo_pago($1) AS clave', [metodo])).rows[0].clave;
     try {
       const saldo = (await db.query("SELECT saldo FROM v_cxc WHERE origen = 'venta' AND doc_id = $1", [id])).rows[0];
-      await db.query('SELECT registrar_abono_cliente($1, NULL, $2, NULL, $3, $4, $5)', [id, saldo.saldo, 'caja', 'Cobro registrado desde Facturas', usuarioId || null]);
+      if (!saldo) return 'ya_estaba_pagada';   // entre las dos lecturas otra persona la cobró
+      await db.query('SELECT registrar_abono_cliente($1, NULL, $2, NULL, $3, $4, $5)', [id, saldo.saldo, cuenta, 'Cobro registrado desde Facturas', usuarioId || null]);
+      await db.query('UPDATE ventas SET metodo_pago = $2 WHERE id = $1 AND metodo_pago IS NULL', [id, metodo]);
       return 'pagada';
     } catch (err) {
       if (err.code === 'P0001' && /ya está pagada/.test(err.message)) return 'ya_estaba_pagada'; // otra persona la cobró justo antes
       throw err;
     }
   }
-  const { rowCount } = await db.query("UPDATE ventas SET estado = 'C' WHERE id = $1 AND estado = 'P'", [id]);
+  const { rowCount } = await db.query(
+    "UPDATE ventas SET estado = 'C', metodo_pago = COALESCE(metodo_pago, $2) WHERE id = $1 AND estado = 'P'", [id, metodo]
+  );
   if (rowCount > 0) return 'pagada';
   const { rows } = await db.query('SELECT estado FROM ventas WHERE id = $1', [id]);
   return rows[0] ? 'ya_estaba_pagada' : null;

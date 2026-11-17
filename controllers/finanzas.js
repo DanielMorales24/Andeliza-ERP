@@ -6,6 +6,8 @@ const { sumarDias } = require('../utils/formato');
 const Contab = require('../models/contabilidad');
 const Cartera = require('../models/cartera');
 const Negocio = require('../models/negocio');
+const Ventas = require('../models/ventas');
+const { numeroCorto } = require('../utils/documentos');
 const Pdf = require('../services/reportesPdfService');
 
 const ORIGENES = {
@@ -50,6 +52,7 @@ function leerFiltrosLibro(q) {
     hasta: V.fechaISO(q.hasta, 'La fecha final'),
     cuenta: V.idOpcional(q.cuenta, 'La cuenta'),
     origen: V.texto(q.origen),
+    venta: V.idOpcional(q.venta, 'La factura'),
     q: V.texto(q.q).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().slice(0, 60),
     orden: q.orden === 'asc' ? 'asc' : 'desc',
     offset: Number.isInteger(Number(q.offset)) && Number(q.offset) > 0 ? Math.min(Number(q.offset), 100000) : 0,
@@ -61,8 +64,17 @@ function leerFiltrosLibro(q) {
 
 async function partidas(req, res, next) {
   try {
-    const [libro, cuentas, balanza] = await Promise.all([Contab.libro(leerFiltrosLibro({})), Contab.cuentas(), Contab.balanza(null, null)]);
-    res.render('finanzas/partidas', { titulo: 'Libro diario', seccion: 'partidas', datos: { libro, cuentas, balanza, origenes: ORIGENES, estado: await Contab.estado() } });
+    // Desde Facturas → "Ver asiento contable" llega ?venta=ID: el libro abre filtrado por esa factura
+    let venta = null;
+    try { venta = V.idOpcional(req.query.venta, 'La factura'); } catch (_) { venta = null; }
+    const factura = venta ? await Ventas.obtener(venta) : null;
+    const filtroVenta = factura
+      ? { id: factura.id, numero: numeroCorto(factura.numero_factura, factura.tipo_documento), anulada: factura.anulada === true }
+      : null;
+    const [libro, cuentas, balanza] = await Promise.all([
+      Contab.libro(leerFiltrosLibro(filtroVenta ? { venta: String(filtroVenta.id) } : {})), Contab.cuentas(), Contab.balanza(null, null),
+    ]);
+    res.render('finanzas/partidas', { titulo: 'Libro diario', seccion: 'partidas', datos: { libro, cuentas, balanza, origenes: ORIGENES, estado: await Contab.estado(), filtroVenta } });
   } catch (err) { next(err); }
 }
 

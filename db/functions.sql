@@ -1,5 +1,5 @@
 -- =====================================================================
--- functions.sql  |  Las RPCs críticas (correr DESPUÉS de las migraciones 01 a 08)
+-- functions.sql  |  Las RPCs críticas (correr DESPUÉS de las migraciones 01 a 09)
 -- Todo es CREATE OR REPLACE: se puede volver a correr completo sin problema.
 --
 -- Facturación en dos modos:
@@ -104,6 +104,10 @@ $$;
 --     [clienteId, usuarioId, JSON.stringify(items), subtotal, impuesto, total]);
 --   rows[0].resultado  ->  { venta_id, numero_factura, tipo_documento }
 -- ---------------------------------------------------------------------
+-- Semana 6: crear_venta recibe el método de pago (parámetro nuevo, al final y con valor por defecto, para que
+-- las llamadas anteriores sigan funcionando). Se elimina la firma vieja para que no queden dos versiones.
+DROP FUNCTION IF EXISTS crear_venta(BIGINT, BIGINT, JSONB, NUMERIC, NUMERIC, NUMERIC, VARCHAR, VARCHAR);
+
 CREATE OR REPLACE FUNCTION crear_venta(
   p_cliente_id      BIGINT,
   p_usuario_id      BIGINT,
@@ -112,7 +116,8 @@ CREATE OR REPLACE FUNCTION crear_venta(
   p_impuesto        NUMERIC,
   p_total           NUMERIC,
   p_numero_factura  VARCHAR DEFAULT NULL,
-  p_estado          VARCHAR DEFAULT 'P'
+  p_estado          VARCHAR DEFAULT 'P',
+  p_metodo_pago     VARCHAR DEFAULT NULL   -- efectivo | tarjeta | transferencia | cheque (solo ventas cobradas)
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -129,6 +134,8 @@ DECLARE
   v_variante_id  BIGINT;
   v_tipo         VARCHAR;
   v_costo_unit   NUMERIC;
+  v_metodo       VARCHAR;
+  v_consumo      JSONB;     -- lo que un kit descontó de cada componente (para poder anular la venta con exactitud)
 BEGIN
   IF p_items IS NULL OR jsonb_typeof(p_items) <> 'array' OR jsonb_array_length(p_items) = 0 THEN
     RAISE EXCEPTION 'La venta no tiene productos.';
@@ -140,6 +147,13 @@ BEGIN
   END IF;
 
   -- Modo de facturación: con CAI activo es fiscal, sin él es interno
+  -- Método de pago: solo en ventas cobradas. Sin método se asume efectivo (lo que el sistema hacía antes).
+  -- Una venta pendiente no lleva método: se registra en cada abono.
+  IF p_estado = 'C' THEN
+    v_metodo := COALESCE(NULLIF(BTRIM(p_metodo_pago), ''), 'efectivo');
+    PERFORM cuenta_metodo_pago(v_metodo);   -- valida que el método exista
+  END IF;
+
   v_tipo := CASE WHEN EXISTS (SELECT 1 FROM configuracion_fiscal WHERE activo = TRUE)
                  THEN 'fiscal' ELSE 'interno' END;
 
@@ -151,8 +165,8 @@ BEGIN
     v_factura := obtener_siguiente_numero_interno();
   END IF;
 
-  INSERT INTO ventas (cliente_id, usuario_id, subtotal, impuesto, total, estado, numero_factura, tipo_documento)
-  VALUES (p_cliente_id, p_usuario_id, p_subtotal, p_impuesto, p_total, p_estado, v_factura, v_tipo)
+  INSERT INTO ventas (cliente_id, usuario_id, subtotal, impuesto, total, estado, numero_factura, tipo_documento, metodo_pago)
+  VALUES (p_cliente_id, p_usuario_id, p_subtotal, p_impuesto, p_total, p_estado, v_factura, v_tipo, v_metodo)
   RETURNING id INTO v_venta_id;
 
   FOR v_item IN SELECT value FROM jsonb_array_elements(p_items) LOOP
@@ -176,6 +190,7 @@ BEGIN
 
     v_precio := COALESCE((v_item->>'precio_unitario')::NUMERIC, v_prod.precio_venta);
     v_costo_unit := v_prod.precio_compra;
+    v_consumo := NULL;
 
     IF v_prod.es_compuesto THEN
       -- Kit: se descuentan los componentes, el kit en sí no tiene stock
@@ -188,6 +203,7 @@ BEGIN
       END IF;
 
       v_costo_unit := 0;
+      v_consumo := '[]'::JSONB;
       FOR v_comp IN
         SELECT p.id, p.nombre, p.stock, p.precio_compra, cp.cantidad AS cant
         FROM componentes_producto cp
@@ -206,6 +222,7 @@ BEGIN
         END IF;
 
         UPDATE productos SET stock = stock - (v_comp.cant * v_cantidad) WHERE id = v_comp.id;
+        v_consumo := v_consumo || jsonb_build_object('producto_id', v_comp.id, 'cantidad', v_comp.cant * v_cantidad);
         -- el costo de un kit es la suma de lo que cuestan sus componentes
         v_costo_unit := v_costo_unit + v_comp.cant * v_comp.precio_compra;
       END LOOP;
@@ -245,8 +262,8 @@ BEGIN
       UPDATE productos SET stock = stock - v_cantidad WHERE id = v_prod.id;
     END IF;
 
-    INSERT INTO detalle_venta (venta_id, producto_id, variante_id, cantidad, precio_unitario, costo_unitario, subtotal)
-    VALUES (v_venta_id, v_prod.id, v_variante_id, v_cantidad, v_precio, v_costo_unit, ROUND(v_cantidad * v_precio, 2));
+    INSERT INTO detalle_venta (venta_id, producto_id, variante_id, cantidad, precio_unitario, costo_unitario, subtotal, componentes)
+    VALUES (v_venta_id, v_prod.id, v_variante_id, v_cantidad, v_precio, v_costo_unit, ROUND(v_cantidad * v_precio, 2), v_consumo);
 
   END LOOP;
 
@@ -255,7 +272,7 @@ BEGIN
 
   INSERT INTO auditoria (usuario_id, accion, entidad, entidad_id, detalles)
   VALUES (p_usuario_id, 'crear_venta', 'ventas', v_venta_id,
-          jsonb_build_object('numero_factura', v_factura, 'tipo_documento', v_tipo, 'total', p_total));
+          jsonb_build_object('numero_factura', v_factura, 'tipo_documento', v_tipo, 'total', p_total, 'metodo_pago', v_metodo));
 
   RETURN jsonb_build_object('venta_id', v_venta_id, 'numero_factura', v_factura, 'tipo_documento', v_tipo);
 END;
@@ -269,6 +286,102 @@ $$;
 -- =====================================================================
 
 -- Id de una cuenta a partir de su clave estable ('caja', 'cxc', 'ventas'...)
+-- =====================================================================
+-- Anulación de una venta (Semana 6, decisión ADR-003). NUNCA borra: marca la venta como anulada,
+-- devuelve el stock exactamente como salió, revierte su partida con una contrapartida (anular_partida)
+-- y lo deja en la auditoría. El número de factura no se reutiliza.
+-- Si la factura tiene abonos vigentes, primero se anulan esos abonos (cada uno revierte su propio asiento).
+-- =====================================================================
+CREATE OR REPLACE FUNCTION anular_venta(p_venta_id BIGINT, p_usuario_id BIGINT, p_motivo TEXT, p_ip TEXT DEFAULT NULL)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v           ventas%ROWTYPE;
+  d           RECORD;
+  c           RECORD;
+  v_motivo    TEXT := NULLIF(BTRIM(p_motivo), '');
+  v_partida   BIGINT;
+  v_reversa   BIGINT;
+  v_devuelto  JSONB := '[]'::JSONB;
+  v_aprox     BOOLEAN := FALSE;
+  v_contab    TEXT;
+BEGIN
+  IF v_motivo IS NULL OR char_length(v_motivo) < 5 THEN
+    RAISE EXCEPTION 'Escribe el motivo de la anulación (al menos 5 caracteres).';
+  END IF;
+
+  SELECT * INTO v FROM ventas WHERE id = p_venta_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'La factura no existe.'; END IF;
+  IF v.anulada THEN RAISE EXCEPTION 'La factura % ya está anulada.', v.numero_factura; END IF;
+  IF EXISTS (SELECT 1 FROM abonos_clientes WHERE venta_id = p_venta_id AND NOT anulado) THEN
+    RAISE EXCEPTION 'La factura % tiene abonos registrados. Anula primero esos abonos en Finanzas → Cuentas por cobrar.', v.numero_factura;
+  END IF;
+
+  -- 1. El stock vuelve exactamente como salió
+  FOR d IN
+    SELECT dv.id, dv.producto_id, dv.variante_id, dv.cantidad, dv.componentes, p.es_compuesto
+      FROM detalle_venta dv JOIN productos p ON p.id = dv.producto_id
+     WHERE dv.venta_id = p_venta_id ORDER BY dv.id
+  LOOP
+    IF d.componentes IS NOT NULL THEN
+      -- kit: se devuelve lo que la venta descontó de cada componente (guardado al vender)
+      FOR c IN SELECT (x->>'producto_id')::BIGINT AS producto_id, (x->>'cantidad')::NUMERIC AS cantidad
+                 FROM jsonb_array_elements(d.componentes) x
+      LOOP
+        UPDATE productos SET stock = stock + c.cantidad WHERE id = c.producto_id;
+        v_devuelto := v_devuelto || jsonb_build_object('producto_id', c.producto_id, 'cantidad', c.cantidad, 'por_kit', d.producto_id);
+      END LOOP;
+    ELSIF d.es_compuesto THEN
+      -- kit vendido antes de la migración 09 (no guardó su consumo): se usa la composición actual
+      v_aprox := TRUE;
+      FOR c IN SELECT cp.producto_hijo_id AS producto_id, cp.cantidad * d.cantidad AS cantidad
+                 FROM componentes_producto cp WHERE cp.producto_padre_id = d.producto_id
+      LOOP
+        UPDATE productos SET stock = stock + c.cantidad WHERE id = c.producto_id;
+        v_devuelto := v_devuelto || jsonb_build_object('producto_id', c.producto_id, 'cantidad', c.cantidad, 'por_kit', d.producto_id);
+      END LOOP;
+    ELSIF d.variante_id IS NOT NULL THEN
+      UPDATE variantes_producto SET stock = stock + d.cantidad WHERE id = d.variante_id;
+      v_devuelto := v_devuelto || jsonb_build_object('producto_id', d.producto_id, 'variante_id', d.variante_id, 'cantidad', d.cantidad);
+    ELSE
+      UPDATE productos SET stock = stock + d.cantidad WHERE id = d.producto_id;
+      v_devuelto := v_devuelto || jsonb_build_object('producto_id', d.producto_id, 'cantidad', d.cantidad);
+    END IF;
+  END LOOP;
+
+  -- 2. La contabilidad: contrapartida exacta de la partida de la venta (si la tiene)
+  SELECT id INTO v_partida FROM partidas
+   WHERE origen_tipo = 'venta' AND origen_id = p_venta_id AND reversa_de IS NULL
+   ORDER BY id LIMIT 1;
+  IF v_partida IS NOT NULL THEN
+    v_reversa := anular_partida(v_partida, p_usuario_id, 'factura ' || v.numero_factura || ' — ' || v_motivo);
+    v_contab := 'revertida';
+  ELSIF (SELECT contabilidad_inicio FROM configuracion_negocio WHERE id = 1) IS NOT NULL THEN
+    v_contab := 'sin_partida';        -- la venta es anterior al inicio de la contabilidad
+  ELSE
+    v_contab := 'sin_contabilidad';
+  END IF;
+
+  -- 3. La venta queda marcada (no se borra nada)
+  UPDATE ventas
+     SET anulada = TRUE, anulada_en = NOW(), anulada_por = p_usuario_id, motivo_anulacion = LEFT(v_motivo, 300)
+   WHERE id = p_venta_id;
+
+  -- 4. Auditoría
+  PERFORM registrar_auditoria(
+    p_usuario_id, 'anular_venta', 'ventas', p_venta_id,
+    'Anuló la factura ' || v.numero_factura || ' por ' || TO_CHAR(v.total, 'FM999999990.00') || ': ' || LEFT(v_motivo, 200),
+    jsonb_build_object('numero_factura', v.numero_factura, 'total', v.total, 'estado', v.estado, 'metodo_pago', v.metodo_pago,
+                       'motivo', v_motivo, 'partida', v_partida, 'partida_anulacion', v_reversa, 'contabilidad', v_contab,
+                       'stock_devuelto', v_devuelto, 'kit_con_composicion_actual', v_aprox),
+    p_ip);
+
+  RETURN jsonb_build_object('venta_id', p_venta_id, 'numero_factura', v.numero_factura, 'partida_anulacion_id', v_reversa,
+                            'contabilidad', v_contab, 'kit_con_composicion_actual', v_aprox);
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION cuenta_por_clave(p_clave VARCHAR)
 RETURNS BIGINT
 LANGUAGE plpgsql STABLE
@@ -457,6 +570,19 @@ $$;
 --   Pendiente: Cuentas x cobrar / Ventas + Impuesto por pagar
 --   y siempre: Costo de ventas / Inventario
 -- ---------------------------------------------------------------------
+-- A qué cuenta entra el dinero según el método de pago (Semana 6, hallazgo 1 de las pruebas con usuarios).
+-- Efectivo a Caja; tarjeta, transferencia y cheque a Bancos. Un método desconocido es un error.
+CREATE OR REPLACE FUNCTION cuenta_metodo_pago(p_metodo VARCHAR)
+RETURNS VARCHAR
+LANGUAGE plpgsql IMMUTABLE
+AS $$
+BEGIN
+  IF p_metodo = 'efectivo' THEN RETURN 'caja'; END IF;
+  IF p_metodo IN ('tarjeta', 'transferencia', 'cheque') THEN RETURN 'bancos'; END IF;
+  RAISE EXCEPTION 'El método de pago "%" no es válido.', COALESCE(p_metodo, '(vacío)');
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION contabilizar_venta(p_venta_id BIGINT)
 RETURNS BIGINT
 LANGUAGE plpgsql
@@ -478,7 +604,8 @@ BEGIN
   SELECT COALESCE(SUM(ROUND(cantidad * costo_unitario, 2)), 0) INTO v_costo FROM detalle_venta WHERE venta_id = p_venta_id;
 
   IF v.total > 0 THEN
-    v_lineas := v_lineas || jsonb_build_object('clave', CASE WHEN v.estado = 'C' THEN 'caja' ELSE 'cxc' END, 'debe', v.total);
+    -- Cobrada: entra a Caja o a Bancos según el método de pago. Pendiente: Cuentas por cobrar.
+    v_lineas := v_lineas || jsonb_build_object('clave', CASE WHEN v.estado = 'C' THEN cuenta_metodo_pago(COALESCE(v.metodo_pago, 'efectivo')) ELSE 'cxc' END, 'debe', v.total);
     IF v.subtotal > 0 THEN v_lineas := v_lineas || jsonb_build_object('clave', 'ventas', 'haber', v.subtotal); END IF;
     IF v.impuesto > 0 THEN v_lineas := v_lineas || jsonb_build_object('clave', 'isv_por_pagar', 'haber', v.impuesto); END IF;
   END IF;
@@ -545,7 +672,7 @@ BEGIN
   UPDATE configuracion_negocio SET contabilidad_inicio = v_fecha WHERE id = 1;
 
   v_inv := valor_inventario();
-  SELECT COALESCE(SUM(total), 0) INTO v_cxc FROM ventas WHERE estado = 'P';
+  SELECT COALESCE(SUM(total), 0) INTO v_cxc FROM ventas WHERE estado = 'P' AND NOT anulada;
 
   IF v_inv > 0 THEN v_lineas := v_lineas || jsonb_build_object('clave', 'inventario', 'debe', v_inv); END IF;
   IF v_cxc > 0 THEN v_lineas := v_lineas || jsonb_build_object('clave', 'cxc', 'debe', v_cxc); END IF;
@@ -860,6 +987,7 @@ BEGIN
   IF p_venta_id IS NOT NULL THEN
     SELECT * INTO v_venta FROM ventas WHERE id = p_venta_id FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'La factura no existe.'; END IF;
+    IF v_venta.anulada THEN RAISE EXCEPTION 'La factura % está anulada: no se le pueden registrar cobros.', v_venta.numero_factura; END IF;
     IF v_venta.estado <> 'P' THEN RAISE EXCEPTION 'La factura % ya está pagada.', v_venta.numero_factura; END IF;
     v_saldo := ROUND(v_venta.total - COALESCE((SELECT SUM(monto) FROM abonos_clientes WHERE venta_id = p_venta_id AND NOT anulado), 0), 2);
     v_fdoc  := fecha_local(v_venta.creado_en);

@@ -13,7 +13,8 @@ const editar = [requireFuncionalidad('facturas'), requireAuth, requirePermiso('f
 router.get('/', ...ver, controlador.index);
 router.get('/datos', ...ver, controlador.datos);
 router.patch('/:id(\\d+)/pagada', ...editar,
-  auditar('marcar_factura_pagada', 'ventas', (req) => `Marcó la factura #${req.params.id} como pagada`), controlador.marcarPagada);
+  auditar('marcar_factura_pagada', 'ventas', (req, cuerpo) => `Marcó la factura #${req.params.id} como pagada`
+    + (cuerpo && cuerpo.metodo_nombre && !cuerpo.yaEstabaPagada ? ` (${cuerpo.metodo_nombre})` : '')), controlador.marcarPagada);
 
 // El PDF también lo necesita el POS (imprimir al cobrar), por eso sirve con cualquiera de las dos funciones y
 // también a quien puede cobrar. Quien no tiene "facturas.ver" solo descarga las suyas (se comprueba en el controlador).

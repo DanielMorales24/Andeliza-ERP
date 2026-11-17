@@ -83,7 +83,7 @@ async function resumen() {
 }
 
 // ---------- Libro diario ----------
-async function libro({ desde, hasta, cuenta, origen, q, orden = 'desc', offset = 0, limite = 50 }) {
+async function libro({ desde, hasta, cuenta, origen, venta, q, orden = 'desc', offset = 0, limite = 50 }) {
   const params = [];
   const cond = [];
   const param = (v) => { params.push(v); return '$' + params.length; };
@@ -91,6 +91,14 @@ async function libro({ desde, hasta, cuenta, origen, q, orden = 'desc', offset =
   if (hasta) cond.push(`p.fecha <= ${param(hasta)}::date`);
   if (origen) cond.push(`p.origen_tipo = ${param(origen)}`);
   if (cuenta) cond.push(`EXISTS (SELECT 1 FROM partida_lineas x WHERE x.partida_id = p.id AND x.cuenta_id = ${param(cuenta)})`);
+  if (venta) {
+    // Todo lo que tocó esa factura: su asiento, los de sus cobros y las contrapartidas de cualquiera de ellos
+    const v = param(venta);
+    const propias = `SELECT x.id FROM partidas x
+                      WHERE (x.origen_tipo = 'venta' AND x.origen_id = ${v})
+                         OR (x.origen_tipo = 'abono_cliente' AND x.origen_id IN (SELECT a.id FROM abonos_clientes a WHERE a.venta_id = ${v}))`;
+    cond.push(`(p.id IN (${propias}) OR p.reversa_de IN (${propias}))`);
+  }
   if (q) {
     const patron = param('%' + q.replace(/[\\%_]/g, '\\$&') + '%');
     cond.push(`(${SIN_ACENTOS('p.descripcion')} LIKE ${patron} ESCAPE '\\' OR lower(p.numero) LIKE ${patron} ESCAPE '\\')`);

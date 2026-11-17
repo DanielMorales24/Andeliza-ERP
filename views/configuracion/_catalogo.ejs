@@ -131,6 +131,18 @@
           </template>
         </div>
       </fieldset>
+      <fieldset class="sm:col-span-2">
+        <legend class="text-sm font-semibold">Métodos de pago en el punto de venta</legend>
+        <p class="text-xs text-gray-500">El efectivo entra a Caja; tarjeta, transferencia y cheque, a Bancos.</p>
+        <div class="mt-2 flex flex-wrap gap-1.5">
+          <template x-for="x in d.maestro.metodosPago" :key="x.clave">
+            <button type="button" class="rounded-full border px-3 py-1.5 text-sm transition" :data-metodo="x.clave" :aria-pressed="tiene('metodosPago', x.clave) ? 'true' : 'false'" @click="alternar('metodosPago', x.clave)"
+                    :class="tiene('metodosPago', x.clave) ? 'border-primario bg-primario text-white' : 'border-borde bg-white hover:bg-fondo'">
+              <span x-text="x.nombre"></span><span class="opacity-75" x-text="' · ' + x.cuenta"></span>
+            </button>
+          </template>
+        </div>
+      </fieldset>
       <fieldset>
         <legend class="text-sm font-semibold">Tipos de ingreso</legend>
         <div class="mt-2 flex flex-wrap gap-1.5">

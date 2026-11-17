@@ -3,6 +3,7 @@ const V = require('../utils/validar');
 const { numeroCorto } = require('../utils/documentos');
 const { hoyISO, fechaHora } = require('../utils/formato');
 const Ventas = require('../models/ventas');
+const Catalogo = require('../utils/catalogo');
 const Documentos = require('./documentos');
 
 const TAMANO_PAGINA = 50;
@@ -51,7 +52,15 @@ function darFormato(filas) {
     ...f,
     numero_corto: numeroCorto(f.numero_factura, f.tipo_documento),
     fecha_texto: fechaHora(f.creado_en),
+    metodo_nombre: f.metodo_pago ? Catalogo.nombreDe('metodosPago', f.metodo_pago) : '',
   }));
+}
+
+// Método con el que se cobra desde Facturas: uno de los activos del negocio. Si no llega
+// (una pantalla abierta con la versión anterior), efectivo, que es lo que se hacía antes.
+function metodoDeCobro(valor, activos) {
+  const defecto = activos.includes('efectivo') ? 'efectivo' : activos[0];
+  return V.eleccion(valor, 'El método de pago', activos, defecto);
 }
 
 // Regla de propiedad del dato: con "facturas.ver" se ven todas; con solo "facturas.ver_propias",
@@ -76,7 +85,13 @@ async function index(req, res, next) {
       hoy: hoyISO(),
       tamanoPagina: TAMANO_PAGINA,
       // La interfaz solo muestra lo que el servidor además permitirá hacer
-      permisos: { marcarPagada: req.user.tiene('facturas', 'editar'), soloPropias: soloLoPropio(req) },
+      permisos: {
+        marcarPagada: req.user.tiene('facturas', 'editar'),
+        // El enlace al asiento solo sirve si el libro diario está activo y la persona puede verlo
+        verAsiento: config.funcionalidades.finanzas === true && req.user.tiene('finanzas', 'ver'),
+        soloPropias: soloLoPropio(req),
+      },
+      metodosPago: Catalogo.pares('metodosPago', res.locals.negocioActual.catalogo.metodosPago),
     };
     res.render('facturas/index', { titulo: 'Facturas', datos });
   } catch (err) {
@@ -95,9 +110,10 @@ async function datos(req, res, next) {
 
 async function marcarPagada(req, res, next) {
   try {
-    const r = await Ventas.marcarPagada(Number(req.params.id), req.user.id);
+    const metodo = metodoDeCobro((req.body || {}).metodo_pago, res.locals.negocioActual.catalogo.metodosPago);
+    const r = await Ventas.marcarPagada(Number(req.params.id), req.user.id, metodo);
     if (!r) return res.status(404).json({ error: 'No se encontró la factura.' });
-    res.json({ ok: true, estado: 'C', yaEstabaPagada: r === 'ya_estaba_pagada' });
+    res.json({ ok: true, estado: 'C', yaEstabaPagada: r === 'ya_estaba_pagada', metodo_pago: metodo, metodo_nombre: Catalogo.nombreDe('metodosPago', metodo) });
   } catch (err) {
     next(err);
   }
