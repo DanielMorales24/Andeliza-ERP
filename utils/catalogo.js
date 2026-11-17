@@ -41,6 +41,7 @@ function resolver(fila) {
     opcionesVariante,
     categoriasGasto: filtrar(f.categorias_gasto_activas, claves(M.categoriasGasto), predeterminadas(M.categoriasGasto)),
     tiposIngreso: filtrar(f.tipos_ingreso_activos, claves(M.tiposIngreso), predeterminadas(M.tiposIngreso)),
+    metodosPago: filtrar(f.metodos_pago_activos, claves(M.metodosPago), predeterminadas(M.metodosPago)),
   };
 }
 
@@ -74,6 +75,7 @@ function paraVista() {
     tiposVariante: M.tiposVariante.map((t) => ({ clave: t.clave, nombre: t.nombre, grupos: M.opcionesVariante[t.clave] ? M.opcionesVariante[t.clave].grupos : [] })),
     categoriasGasto: M.categoriasGasto.map((x) => ({ clave: x.clave, nombre: x.nombre })),
     tiposIngreso: M.tiposIngreso.map((x) => ({ clave: x.clave, nombre: x.nombre })),
+    metodosPago: M.metodosPago.map((x) => ({ clave: x.clave, nombre: x.nombre, cuenta: x.cuenta })),
     monedas: M.monedas, formatosFecha: M.formatosFecha, zonasHorarias: M.zonasHorarias, tasasImpuesto: M.tasasImpuesto,
     paletas: paletasEvaluadas(),
   };
@@ -92,6 +94,7 @@ function lista(valor, maestro, etiqueta, minimo) {
 const validarUnidades = (valor) => lista(valor, claves(M.unidades), 'Unidades de venta', 1);
 const validarCategoriasGasto = (valor) => lista(valor, claves(M.categoriasGasto), 'Categorías de gasto', 1);
 const validarTiposIngreso = (valor) => lista(valor, claves(M.tiposIngreso), 'Tipos de ingreso', 1);
+const validarMetodosPago = (valor) => lista(valor, claves(M.metodosPago), 'Métodos de pago', 1);
 
 function validarEleccion(cuerpo) {
   const b = cuerpo || {};
@@ -107,6 +110,8 @@ function validarEleccion(cuerpo) {
     opcionesVariante: opciones,
     categoriasGasto: validarCategoriasGasto(b.categoriasGasto),
     tiposIngreso: validarTiposIngreso(b.tiposIngreso),
+    // Si la pantalla no lo manda (versión anterior abierta en otra pestaña), se conserva lo que había
+    metodosPago: b.metodosPago === undefined ? undefined : validarMetodosPago(b.metodosPago),
   };
 }
 
@@ -133,5 +138,5 @@ function validarPaleta(id) {
 
 module.exports = {
   resolver, tiposTodos, opcionesMaestras, opcionesPredeterminadas, unidad, nombreUnidad, unidadesDecimales, paleta, nombreDe, pares,
-  unidadesParaFormulario, paletasEvaluadas, paraVista, validarUnidades, validarCategoriasGasto, validarTiposIngreso, validarEleccion, validarRegional, validarPaleta,
+  unidadesParaFormulario, paletasEvaluadas, paraVista, validarUnidades, validarCategoriasGasto, validarTiposIngreso, validarMetodosPago, validarEleccion, validarRegional, validarPaleta,
 };

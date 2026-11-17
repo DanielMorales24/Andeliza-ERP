@@ -13,7 +13,8 @@ const SELECT_LISTA = `
          COALESCE(v.bajas, 0)  AS variantes_bajas,
          COALESCE(v.skus, '')  AS skus_variantes,
          COALESCE(k.num, 0)    AS num_componentes,
-         k.disponibles         AS kits_disponibles
+         k.disponibles         AS kits_disponibles,
+         k.limitante           AS kit_limitante
     FROM productos p
     LEFT JOIN categorias  c  ON c.id  = p.categoria_id
     LEFT JOIN proveedores pr ON pr.id = p.proveedor_id
@@ -25,7 +26,8 @@ const SELECT_LISTA = `
        WHERE producto_id = p.id AND activo
     ) v ON TRUE
     LEFT JOIN LATERAL (
-      SELECT COUNT(*) AS num, MIN(FLOOR(h.stock / cp.cantidad)) AS disponibles
+      SELECT COUNT(*) AS num, MIN(FLOOR(h.stock / cp.cantidad)) AS disponibles,
+             (array_agg(h.nombre ORDER BY FLOOR(h.stock / cp.cantidad), h.nombre))[1] AS limitante
         FROM componentes_producto cp
         JOIN productos h ON h.id = cp.producto_hijo_id
        WHERE cp.producto_padre_id = p.id
@@ -38,11 +40,13 @@ function enriquecer(p) {
   let detalle;
 
   if (p.es_compuesto) {
+    // Un kit no tiene stock propio: se muestra cuántos se pueden armar con lo que hay de cada componente
     stock = p.kits_disponibles || 0;
     estado = stock <= 0 ? 'agotado' : 'ok';
     detalle = p.num_componentes
       ? `Kit de ${p.num_componentes} ${p.num_componentes === 1 ? 'componente' : 'componentes'}`
-      : 'Kit sin componentes';
+        + (p.kit_limitante && p.num_componentes > 1 ? ` · lo limita ${p.kit_limitante}` : '')
+      : 'Kit sin componentes: agrégale componentes';
   } else if (p.num_variantes > 0) {
     stock = p.stock_variantes;
     estado = stock <= 0 ? 'agotado' : p.variantes_bajas > 0 ? 'bajo' : 'ok';

@@ -17,6 +17,7 @@ document.addEventListener('alpine:init', function () {
       aviso: '',
       confirmar: null,
       pagando: false,
+      metodoCobro: 'efectivo',
       secuencia: 0,
       temporizador: null,
 
@@ -86,14 +87,20 @@ document.addEventListener('alpine:init', function () {
       },
 
       // ---- Marcar como pagada ----
-      pedirPago(fila) { this.confirmar = fila; },
+      // A qué cuenta entra el dinero según cómo pagó (lo mismo que hace la base con cuenta_metodo_pago)
+      cuentaDe(metodo) { return metodo === 'efectivo' ? 'Caja' : 'Bancos'; },
+      pedirPago(fila) {
+        const m = this.d.metodosPago || [];
+        this.metodoCobro = m.some((x) => x[0] === 'efectivo') ? 'efectivo' : (m[0] ? m[0][0] : 'efectivo');
+        this.confirmar = fila;
+      },
       cancelarPago() { if (!this.pagando) this.confirmar = null; },
       async confirmarPago() {
         const fila = this.confirmar;
         if (!fila || this.pagando) return;
         this.pagando = true;
         try {
-          await api('/facturas/' + fila.id + '/pagada', { method: 'PATCH' });
+          const r = await api('/facturas/' + fila.id + '/pagada', { method: 'PATCH', body: { metodo_pago: this.metodoCobro } });
           this.confirmar = null;
           if (this.f.estado === 'P') {
             // En la vista de pendientes la fila ya no corresponde: sale de la lista
@@ -101,10 +108,14 @@ document.addEventListener('alpine:init', function () {
             this.resumen = { cantidad: Math.max(0, this.resumen.cantidad - 1), suma: Math.max(0, +(this.resumen.suma - fila.total).toFixed(2)), pendiente: Math.max(0, +(this.resumen.pendiente - fila.total).toFixed(2)) };
           } else {
             const i = this.filas.findIndex((x) => x.id === fila.id);
-            if (i !== -1) this.filas.splice(i, 1, Object.assign({}, this.filas[i], { estado: 'C' }));
+            if (i !== -1) {
+              const cambios = { estado: 'C', saldo: 0 };
+              if (!this.filas[i].metodo_pago && r && r.metodo_pago) Object.assign(cambios, { metodo_pago: r.metodo_pago, metodo_nombre: r.metodo_nombre });
+              this.filas.splice(i, 1, Object.assign({}, this.filas[i], cambios));
+            }
             this.resumen = Object.assign({}, this.resumen, { pendiente: Math.max(0, +(this.resumen.pendiente - fila.total).toFixed(2)) });
           }
-          toast('Factura ' + fila.numero_corto + ' marcada como pagada.');
+          toast('Factura ' + fila.numero_corto + ' marcada como pagada' + (r && r.metodo_nombre ? ' (' + r.metodo_nombre + ').' : '.'));
         } catch (e) {
           toast(e.message, 'error');
         } finally {

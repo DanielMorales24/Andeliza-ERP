@@ -47,6 +47,7 @@ document.addEventListener('alpine:init', function () {
       carrito: [],
       cliente: null,
       pendiente: false,
+      metodo: '',          // método de pago de la venta de contado
       fechaVenc: '',
       clave: null,
       consumo: {},
@@ -75,6 +76,7 @@ document.addEventListener('alpine:init', function () {
 
       init() {
         this.d = JSON.parse(document.getElementById('datos-pagina').textContent);
+        this.metodo = this.metodoInicial();
         this.clientes = this.d.clientes.map((c) => this.prepararCliente(c));
         this.cargarProductos(this.d.productos);
 
@@ -472,6 +474,9 @@ document.addEventListener('alpine:init', function () {
         this.cambioCarrito();
       },
 
+      // El primer método activo (normalmente efectivo) es el que viene marcado en cada venta nueva
+      metodoInicial() { return (this.d.metodosPago && this.d.metodosPago[0]) ? this.d.metodosPago[0][0] : 'efectivo'; },
+
       datosVenta() {
         return {
           cliente_id: this.cliente ? this.cliente.id : null,
@@ -488,12 +493,13 @@ document.addEventListener('alpine:init', function () {
         try {
           const r = await api('/pos/cobrar', {
             method: 'POST',
-            body: Object.assign(this.datosVenta(), { pendiente: this.pendiente, clave: this.clave }),
+            body: Object.assign(this.datosVenta(), { pendiente: this.pendiente, clave: this.clave, metodo_pago: this.pendiente ? null : this.metodo }),
           });
           this.exito = r.venta;
           this.carrito = [];
           this.cliente = null;
           this.pendiente = false;
+          this.metodo = this.metodoInicial();
           this.fechaVenc = '';
           this.clave = null;
           this.recalcular();
@@ -582,6 +588,7 @@ document.addEventListener('alpine:init', function () {
             t: Date.now(),
             cliente_id: this.cliente ? this.cliente.id : null,
             pendiente: this.pendiente,
+            metodo: this.metodo,
             fecha_venc: this.fechaVenc,
             lineas: this.carrito.map((l) => ({ producto_id: l.producto_id, variante_id: l.variante_id, cantidad: l.cantidad })),
           }));
@@ -606,6 +613,7 @@ document.addEventListener('alpine:init', function () {
           });
           this.cliente = g.cliente_id ? this.clientes.find((c) => c.id === g.cliente_id) || null : null;
           this.pendiente = !!g.pendiente;
+          if (g.metodo && this.d.metodosPago.some((m) => m[0] === g.metodo)) this.metodo = g.metodo;
           this.fechaVenc = typeof g.fecha_venc === 'string' && g.fecha_venc >= this.d.hoy ? g.fecha_venc : '';
 
           const avisos = this.reconciliar(false);

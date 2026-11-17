@@ -6,10 +6,10 @@ document.addEventListener('alpine:init', function () {
 
   Alpine.data('configCatalogo', function () {
     return {
-      d: { negocio: {}, maestro: { paletas: [], unidades: [], tiposVariante: [], categoriasGasto: [], tiposIngreso: [], monedas: [], formatosFecha: [], zonasHorarias: [], tasasImpuesto: [] }, usoUnidades: {} },
+      d: { negocio: {}, maestro: { paletas: [], unidades: [], tiposVariante: [], categoriasGasto: [], tiposIngreso: [], metodosPago: [], monedas: [], formatosFecha: [], zonasHorarias: [], tasasImpuesto: [] }, usoUnidades: {} },
       paleta: '', paletaGuardada: '',
       r: { moneda: '', formatoFecha: '', zonaHoraria: '', tasaImpuesto: 15 },
-      c: { unidades: [], tiposVariante: [], opcionesVariante: {}, categoriasGasto: [], tiposIngreso: [] },
+      c: { unidades: [], tiposVariante: [], opcionesVariante: {}, categoriasGasto: [], tiposIngreso: [], metodosPago: [] },
       guardandoP: false, guardandoR: false, guardandoC: false, errP: '', errR: '', errC: '',
 
       init() {
@@ -69,6 +69,7 @@ document.addEventListener('alpine:init', function () {
         this.errC = '';
         if (!this.c.unidades.length) { this.errC = 'Deja activa al menos una unidad de venta.'; return; }
         if (!this.c.categoriasGasto.length || !this.c.tiposIngreso.length) { this.errC = 'Deja activa al menos una categoría de gasto y un tipo de ingreso.'; return; }
+        if (!this.c.metodosPago.length) { this.errC = 'Deja activo al menos un método de pago.'; return; }
         this.guardandoC = true;
         try {
           const r = await api('/configuracion/catalogo', { method: 'PUT', body: this.c });

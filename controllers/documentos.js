@@ -2,6 +2,7 @@
 const config = require('../client.config');
 const Negocio = require('../models/negocio');
 const Pdf = require('../services/pdfService');
+const Catalogo = require('../utils/catalogo');
 const { partirNumero } = require('../utils/documentos');
 const { fecha, sumarDias, hoyISO } = require('../utils/formato');
 
@@ -39,6 +40,8 @@ async function documentoDeVenta(venta) {
     fecha: venta.creado_en,
     estado: venta.estado,
     vencimiento: venta.estado === 'P' ? venta.fecha_vencimiento : null,
+    // Cómo pagó (las ventas de antes de la semana 6 no lo tienen guardado: no se inventa)
+    formaPago: venta.metodo_pago ? Catalogo.nombreDe('metodosPago', venta.metodo_pago) : null,
     cliente: venta.cliente_id
       ? { nombre: venta.cliente_nombre, rtn: venta.cliente_rtn, telefono: venta.cliente_telefono, direccion: venta.cliente_direccion, correo: venta.cliente_correo }
       : null,

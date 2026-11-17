@@ -21,6 +21,8 @@ async function index(req, res, next) {
       facturacion,
       tasa,
       impuestoIncluido: config.valoresPorDefecto.impuestoIncluidoEnPrecio === true,
+      // Métodos de pago que este negocio usa (Configuración > Catálogo del negocio), como [[clave, nombre]]
+      metodosPago: require('../utils/catalogo').pares('metodosPago', res.locals.negocioActual.catalogo.metodosPago),
       tiposVariante: require('../utils/catalogo').tiposTodos(),   // todos los del catálogo: una variante se vende aunque su tipo ya no esté activo
       unidadesDecimales: unidadesDecimales(),
       usuarioId: req.user.id,
@@ -90,6 +92,8 @@ function resumenVenta(v) {
     numero_corto: numeroCorto(v.numero_factura, v.tipo_documento),
     tipo_documento: v.tipo_documento,
     estado: v.estado,
+    metodo_pago: v.metodo_pago,
+    metodo_nombre: v.metodo_pago ? require('../utils/catalogo').nombreDe('metodosPago', v.metodo_pago) : '',
     subtotal: v.subtotal,
     impuesto: v.impuesto,
     total: v.total,
@@ -116,13 +120,17 @@ async function cobrar(req, res, next) {
 
     // Vencimiento (solo para ventas a crédito): hoy o después, hasta 10 años
     const pendiente = V.booleano(b.pendiente);
+    // Venta de contado: el método de pago debe ser uno de los activos del negocio. Si no llega (una pestaña
+    // abierta con la versión anterior), se usa el primero activo. Una venta pendiente no lleva método.
+    const activos = res.locals.negocioActual.catalogo.metodosPago;
+    const metodoPago = pendiente ? null : V.eleccion(b.metodo_pago, 'El método de pago', activos, activos[0]);
     const fechaVencimiento = pendiente ? V.fechaISO(b.fecha_vencimiento, 'La fecha de vencimiento') : null;
     if (fechaVencimiento && (fechaVencimiento < hoyISO() || fechaVencimiento > sumarDias(hoyISO(), 3650))) {
       throw new V.ErrorValidacion('La fecha de vencimiento debe ser de hoy en adelante.');
     }
 
     const r = await Ventas.crear({
-      clienteId, usuarioId: req.user.id, items, pendiente, clave, fechaVencimiento,
+      clienteId, usuarioId: req.user.id, items, pendiente, clave, fechaVencimiento, metodoPago,
     });
     res.status(r.repetida ? 200 : 201).json({ ok: true, repetida: r.repetida, venta: resumenVenta(r.venta) });
   } catch (err) {

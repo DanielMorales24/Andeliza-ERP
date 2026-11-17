@@ -88,12 +88,16 @@
             <td class="px-4 py-3">
               <span class="insignia" :class="fila.estado === 'C' ? 'ins-ok' : 'ins-bajo'"><i></i><span x-text="fila.estado === 'C' ? 'Pagada' : 'Pendiente'"></span></span>
               <span class="mt-0.5 block text-xs text-gray-500 tabular-nums" x-show="fila.estado === 'P'">Saldo <span x-text="dinero(fila.saldo)"></span></span>
+              <span class="mt-0.5 block text-xs text-gray-500" x-show="fila.estado === 'C' && fila.metodo_nombre" data-metodo-fila x-text="fila.metodo_nombre"></span>
             </td>
             <td class="whitespace-nowrap px-4 py-3 text-right font-medium tabular-nums" x-text="dinero(fila.total)"></td>
-            <td class="whitespace-nowrap px-4 py-3 text-right">
-              <a :href="'/facturas/' + fila.id + '/pdf'" target="_blank" rel="noopener" class="btn-texto">Ver PDF</a>
-              <a :href="'/facturas/' + fila.id + '/pdf?descargar=1'" class="btn-texto apagar">Descargar</a>
-              <button type="button" class="btn-texto" x-show="fila.estado === 'P' && (d.permisos || {}).marcarPagada" @click="pedirPago(fila)">Marcar pagada</button>
+            <td class="px-4 py-3">
+              <div class="ml-auto flex max-w-[15.5rem] flex-wrap items-center justify-end gap-x-0.5 gap-y-1 whitespace-nowrap">
+                <a :href="'/facturas/' + fila.id + '/pdf'" target="_blank" rel="noopener" class="btn-texto">Ver PDF</a>
+                <a :href="'/facturas/' + fila.id + '/pdf?descargar=1'" class="btn-texto apagar">Descargar</a>
+                <button type="button" class="btn-texto" x-show="fila.estado === 'P' && (d.permisos || {}).marcarPagada" @click="pedirPago(fila)">Marcar pagada</button>
+                <a :href="'/finanzas/partidas?venta=' + fila.id" class="btn-texto apagar" x-show="fila.tiene_partida && (d.permisos || {}).verAsiento" data-ver-asiento>Ver asiento contable</a>
+              </div>
             </td>
           </tr>
         </template>
@@ -117,11 +121,13 @@
           <span class="insignia" :class="fila.tipo_documento === 'fiscal' ? 'ins-marca' : 'ins-neutra'" x-text="fila.tipo_documento === 'fiscal' ? 'Fiscal' : 'Interna'"></span>
           <span class="insignia" :class="fila.estado === 'C' ? 'ins-ok' : 'ins-bajo'"><i></i><span x-text="fila.estado === 'C' ? 'Pagada' : 'Pendiente'"></span></span>
           <span class="text-xs text-gray-500 tabular-nums self-center" x-show="fila.estado === 'P'" x-text="'Saldo ' + dinero(fila.saldo)"></span>
+          <span class="text-xs text-gray-500 self-center" x-show="fila.estado === 'C' && fila.metodo_nombre" x-text="fila.metodo_nombre"></span>
         </div>
         <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-borde pt-3">
           <a :href="'/facturas/' + fila.id + '/pdf'" target="_blank" rel="noopener" class="btn btn-secundario h-11 flex-1">Ver PDF</a>
           <a :href="'/facturas/' + fila.id + '/pdf?descargar=1'" class="btn btn-secundario h-11 flex-1">Descargar</a>
           <button type="button" class="btn btn-primario h-11 w-full" x-show="fila.estado === 'P' && (d.permisos || {}).marcarPagada" @click="pedirPago(fila)">Marcar como pagada</button>
+          <a :href="'/finanzas/partidas?venta=' + fila.id" class="btn-texto" x-show="fila.tiene_partida && (d.permisos || {}).verAsiento">Ver asiento contable</a>
         </div>
       </article>
     </template>
@@ -146,8 +152,18 @@
           <p class="mt-2 text-sm text-gray-600">
             La factura <span class="font-medium text-tinta tabular-nums" x-text="confirmar.numero_corto"></span> de
             <span class="font-medium text-tinta" x-text="confirmar.cliente"></span> por
-            <span class="font-medium text-tinta tabular-nums" x-text="dinero(confirmar.total)"></span> se cobra completa: el saldo de <span class="font-medium text-tinta tabular-nums" x-text="dinero(confirmar.saldo)"></span> entra a Caja. Si el cliente paga en partes, usa Cuentas por cobrar. Esto no se puede deshacer desde aquí.
+            <span class="font-medium text-tinta tabular-nums" x-text="dinero(confirmar.total)"></span> se cobra completa: el saldo de <span class="font-medium text-tinta tabular-nums" x-text="dinero(confirmar.saldo)"></span> entra a <span class="font-medium text-tinta" x-text="cuentaDe(metodoCobro)"></span>. Si el cliente paga en partes, usa Cuentas por cobrar. Esto no se puede deshacer desde aquí.
           </p>
+          <div class="mt-4" role="radiogroup" aria-labelledby="fac-metodo-titulo">
+            <p id="fac-metodo-titulo" class="etiqueta text-xs">¿Cómo pagó?</p>
+            <div class="flex flex-wrap gap-2">
+              <template x-for="m in (d.metodosPago || [])" :key="m[0]">
+                <button type="button" role="radio" :aria-checked="metodoCobro === m[0]" :data-metodo-cobro="m[0]" @click="metodoCobro = m[0]"
+                        class="h-10 rounded-full border px-4 text-sm font-medium transition"
+                        :class="metodoCobro === m[0] ? 'border-primario bg-primario text-white' : 'border-borde bg-white text-tinta hover:bg-fondo'" x-text="m[1]"></button>
+              </template>
+            </div>
+          </div>
           <div class="mt-5 flex gap-2" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
             <button type="button" class="btn btn-secundario flex-1" @click="cancelarPago()" :disabled="pagando">Cancelar</button>
             <button type="button" class="btn btn-primario flex-1" @click="confirmarPago()" :disabled="pagando" x-text="pagando ? 'Guardando…' : 'Sí, marcar pagada'"></button>

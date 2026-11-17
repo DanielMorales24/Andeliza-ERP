@@ -163,12 +163,14 @@ module.exports = {
       { clave: 'otros', nombre: 'Otros', predeterminada: true },
     ],
 
-    // Todavía sin uso en pantalla: quedan listos para la historia HU-31 (método de pago en el POS)
+    // Cómo paga el cliente una venta de contado (Semana 6, HU-31). La cuenta la decide la base de datos
+    // (cuenta_metodo_pago): efectivo entra a Caja; tarjeta, transferencia y cheque, a Bancos.
+    // Agregar un método nuevo exige también agregarlo en esa función y en la restricción de la tabla ventas.
     metodosPago: [
-      { clave: 'efectivo', nombre: 'Efectivo' },
-      { clave: 'transferencia', nombre: 'Transferencia' },
-      { clave: 'tarjeta', nombre: 'Tarjeta' },
-      { clave: 'cheque', nombre: 'Cheque' },
+      { clave: 'efectivo', nombre: 'Efectivo', cuenta: 'Caja', predeterminada: true },
+      { clave: 'tarjeta', nombre: 'Tarjeta', cuenta: 'Bancos', predeterminada: true },
+      { clave: 'transferencia', nombre: 'Transferencia', cuenta: 'Bancos', predeterminada: true },
+      { clave: 'cheque', nombre: 'Cheque', cuenta: 'Bancos' },
     ],
 
     documentosIdentidad: [

@@ -87,8 +87,9 @@
             <td class="px-4 py-3 text-right tabular-nums" x-text="dinero(f.precio_venta)"></td>
             <td class="px-4 py-3">
               <div class="flex items-center gap-2">
-                <span class="font-medium tabular-nums" x-text="cantidad(f.stock_mostrar)"></span>
-                <span class="text-xs text-gray-500" x-text="f.unidad"></span>
+                <span class="tabular-nums" x-show="f.es_compuesto" data-kit-armar>Puedes armar <span class="font-medium" x-text="cantidad(f.stock_mostrar)"></span></span>
+                <span class="font-medium tabular-nums" x-show="!f.es_compuesto" x-text="cantidad(f.stock_mostrar)"></span>
+                <span class="text-xs text-gray-500" x-show="!f.es_compuesto" x-text="f.unidad"></span>
                 <span class="insignia" :class="claseEstado(f.estado_stock)"><i></i><span x-text="textoEstado(f.estado_stock)"></span></span>
               </div>
               <p class="mt-0.5 text-xs text-gray-500" x-text="f.detalle_stock"></p>
@@ -122,7 +123,8 @@
 
           <div class="mt-2 flex flex-wrap items-center gap-2">
             <span class="insignia" :class="claseEstado(f.estado_stock)"><i></i><span x-text="textoEstado(f.estado_stock)"></span></span>
-            <span class="text-sm tabular-nums"><span class="font-medium" x-text="cantidad(f.stock_mostrar)"></span> <span class="text-xs text-gray-500" x-text="f.unidad"></span></span>
+            <span class="text-sm tabular-nums" x-show="f.es_compuesto">Puedes armar <span class="font-medium" x-text="cantidad(f.stock_mostrar)"></span></span>
+            <span class="text-sm tabular-nums" x-show="!f.es_compuesto"><span class="font-medium" x-text="cantidad(f.stock_mostrar)"></span> <span class="text-xs text-gray-500" x-text="f.unidad"></span></span>
           </div>
           <p class="mt-1 text-xs text-gray-500" x-text="f.detalle_stock"></p>
 

@@ -14,7 +14,7 @@ const FABRICA = config.valoresPorDefecto;
 
 const COLUMNAS_NEGOCIO = `nombre, logo_url, rtn, direccion, telefono, correo, zona_horaria, moneda, formato_fecha, tasa_impuesto,
   paleta_id, color_primario, color_acento, unidades_activas, tipos_variante_activos, opciones_variante_activas,
-  categorias_gasto_activas, tipos_ingreso_activos, onboarding_completado, onboarding_paso`;
+  categorias_gasto_activas, tipos_ingreso_activos, metodos_pago_activos, onboarding_completado, onboarding_paso`;
 
 // Sin caché a propósito: en Vercel cada instancia tendría la suya y, tras guardar en Configuración,
 // otra instancia podría seguir mostrando lo viejo. Es una lectura por llave primaria.
@@ -211,9 +211,11 @@ async function guardarCatalogo(e) {
   await db.query(
     `UPDATE configuracion_negocio
         SET unidades_activas = $1::jsonb, tipos_variante_activos = $2::jsonb, opciones_variante_activas = $3::jsonb,
-            categorias_gasto_activas = $4::jsonb, tipos_ingreso_activos = $5::jsonb
+            categorias_gasto_activas = $4::jsonb, tipos_ingreso_activos = $5::jsonb,
+            metodos_pago_activos = COALESCE($6::jsonb, metodos_pago_activos)
       WHERE id = 1`,
-    [JSON.stringify(e.unidades), JSON.stringify(e.tiposVariante), JSON.stringify(e.opcionesVariante), JSON.stringify(e.categoriasGasto), JSON.stringify(e.tiposIngreso)]
+    [JSON.stringify(e.unidades), JSON.stringify(e.tiposVariante), JSON.stringify(e.opcionesVariante), JSON.stringify(e.categoriasGasto), JSON.stringify(e.tiposIngreso),
+     e.metodosPago === undefined ? null : JSON.stringify(e.metodosPago)]
   );
 }
 
