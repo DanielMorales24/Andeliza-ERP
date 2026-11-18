@@ -36,8 +36,8 @@ function leerFiltros(q, estricto) {
   if (['fiscal', 'interno'].includes(tipo)) f.tipo = tipo;
   else if (tipo && estricto) throw new V.ErrorValidacion('El tipo de documento no es válido.');
 
-  const estado = V.texto(q.estado);
-  if (['P', 'C'].includes(estado)) f.estado = estado;
+  const estado = V.texto(q.estado);   // P pendientes, C pagadas, A anuladas
+  if (['P', 'C', 'A'].includes(estado)) f.estado = estado;
   else if (estado && estricto) throw new V.ErrorValidacion('El estado no es válido.');
 
   f.q = quitarAcentos(V.texto(q.q)).slice(0, 60);
@@ -53,6 +53,7 @@ function darFormato(filas) {
     numero_corto: numeroCorto(f.numero_factura, f.tipo_documento),
     fecha_texto: fechaHora(f.creado_en),
     metodo_nombre: f.metodo_pago ? Catalogo.nombreDe('metodosPago', f.metodo_pago) : '',
+    anulada_texto: f.anulada_en ? fechaHora(f.anulada_en) : '',
   }));
 }
 
@@ -72,7 +73,7 @@ async function consultar(filtros, soloPropias, soloPropiasId) {
   return {
     filas: darFormato(r.filas),
     hayMas: r.hayMas,
-    resumen: { cantidad: r.resumen.cantidad, suma: r.resumen.suma, pendiente: r.resumen.pendiente },
+    resumen: { cantidad: r.resumen.cantidad, suma: r.resumen.suma, pendiente: r.resumen.pendiente, anuladas: r.resumen.anuladas },
   };
 }
 
@@ -87,6 +88,7 @@ async function index(req, res, next) {
       // La interfaz solo muestra lo que el servidor además permitirá hacer
       permisos: {
         marcarPagada: req.user.tiene('facturas', 'editar'),
+        anular: req.user.tiene('facturas', 'anular'),
         // El enlace al asiento solo sirve si el libro diario está activo y la persona puede verlo
         verAsiento: config.funcionalidades.finanzas === true && req.user.tiene('finanzas', 'ver'),
         soloPropias: soloLoPropio(req),
@@ -113,7 +115,32 @@ async function marcarPagada(req, res, next) {
     const metodo = metodoDeCobro((req.body || {}).metodo_pago, res.locals.negocioActual.catalogo.metodosPago);
     const r = await Ventas.marcarPagada(Number(req.params.id), req.user.id, metodo);
     if (!r) return res.status(404).json({ error: 'No se encontró la factura.' });
+    if (r === 'anulada') return res.status(409).json({ error: 'La factura está anulada: no se puede cobrar.' });
     res.json({ ok: true, estado: 'C', yaEstabaPagada: r === 'ya_estaba_pagada', metodo_pago: metodo, metodo_nombre: Catalogo.nombreDe('metodosPago', metodo) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Anular una factura (solo con "facturas.anular": administrador y supervisor). No borra nada:
+// la base devuelve el stock, revierte el asiento y deja la constancia en la bitácora.
+async function anular(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const motivo = V.texto((req.body || {}).motivo);
+    if (motivo.length < 5) throw new V.ErrorValidacion('Escribe el motivo de la anulación (al menos 5 caracteres).');
+    if (motivo.length > 300) throw new V.ErrorValidacion('El motivo no puede pasar de 300 caracteres.');
+    const venta = await Ventas.obtener(id);
+    if (!venta) return res.status(404).json({ error: 'No se encontró la factura.' });
+    const r = await Ventas.anular(id, req.user.id, motivo, req.ip);
+    res.json({
+      ok: true,
+      id,
+      numero_factura: r.numero_factura,
+      contabilidad: r.contabilidad,
+      partida_anulacion_id: r.partida_anulacion_id,
+      kit_con_composicion_actual: r.kit_con_composicion_actual,
+    });
   } catch (err) {
     next(err);
   }
@@ -136,4 +163,4 @@ async function pdf(req, res, next) {
   }
 }
 
-module.exports = { index, datos, marcarPagada, pdf, leerFiltros };
+module.exports = { index, datos, marcarPagada, anular, pdf, leerFiltros };

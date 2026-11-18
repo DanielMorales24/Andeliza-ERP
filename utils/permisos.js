@@ -29,6 +29,7 @@ const ACCIONES = [
   { clave: 'editar', etiqueta: 'Editar' },
   { clave: 'eliminar', etiqueta: 'Eliminar' },
   { clave: 'ver_propias', etiqueta: 'Solo propias' },
+  { clave: 'anular', etiqueta: 'Anular' },
 ];
 
 function crearUsuarioSesion(f) {

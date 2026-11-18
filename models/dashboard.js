@@ -31,7 +31,7 @@ async function stockBajo() {
 }
 
 async function facturasPendientes() {
-  const { rows } = await db.query("SELECT COUNT(*)::int AS total FROM ventas WHERE estado = 'P'");
+  const { rows } = await db.query("SELECT COUNT(*)::int AS total FROM ventas WHERE estado = 'P' AND NOT anulada");
   return rows[0].total;
 }
 

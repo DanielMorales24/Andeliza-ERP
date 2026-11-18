@@ -80,6 +80,68 @@ input.interruptor:disabled { opacity: .5; cursor: not-allowed; }
 }
 .cant:focus { outline: none; border-color: var(--primario); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primario) 22%, transparent); }
 
+/* ---------- Pantalla de acceso (Semana 6) ----------
+   Todo sale de la paleta del negocio: --primario para el campo de marca y el botón, --acento para el
+   "rótulo" del logo. Así cualquier paleta (de fábrica o propia) se ve bien sin tocar este archivo. */
+.acceso-marca {
+  position: relative; isolation: isolate; overflow: hidden; color: #fff;
+  background:
+    radial-gradient(42rem 28rem at 85% -10%, color-mix(in srgb, color-mix(in srgb, var(--primario) 45%, #fff) 30%, transparent), transparent 64%),
+    linear-gradient(158deg, var(--primario) 0%, color-mix(in srgb, var(--primario) 70%, #000) 100%);
+}
+/* Trama de puntos muy tenue: da textura al degradado sin competir con el logo */
+.acceso-marca::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; opacity: .09;
+  background-image: radial-gradient(#fff 1px, transparent 1.4px); background-size: 18px 18px;
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent 80%); mask-image: linear-gradient(to bottom, #000, transparent 80%);
+}
+/* El logo va en un rótulo blanco con una sombra sólida del color de acento, como el letrero de la tienda */
+.acceso-logo {
+  display: grid; place-items: center; width: 8.5rem; height: 8.5rem; padding: 1rem;
+  border-radius: 1.75rem; background: #fff;
+  box-shadow: .5rem .5rem 0 var(--acento), 0 26px 50px -18px rgba(0, 0, 0, .55);
+  animation: acceso-entrada .55s cubic-bezier(.2, .8, .2, 1) both;
+}
+.acceso-logo img { width: 100%; height: 100%; object-fit: contain; }
+.acceso-inicial { font-family: 'Barlow Condensed', Barlow, sans-serif; font-weight: 700; font-size: 4.5rem; line-height: 1; color: var(--primario); }
+.acceso-nombre { font-size: clamp(2.5rem, 7vw, 4.75rem); line-height: .95; letter-spacing: -.01em; text-wrap: balance; }
+@media (min-width: 1024px) {
+  .acceso-logo { width: 11rem; height: 11rem; padding: 1.35rem; border-radius: 2.25rem; box-shadow: .7rem .7rem 0 var(--acento), 0 34px 64px -20px rgba(0, 0, 0, .6); }
+}
+@keyframes acceso-entrada { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
+
+.acceso-fondo {
+  background:
+    radial-gradient(36rem 22rem at 100% 0%, color-mix(in srgb, var(--primario) 9%, transparent), transparent 70%),
+    var(--fondo);
+}
+.acceso-tarjeta {
+  position: relative; background: #fff; border-radius: 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--primario) 10%, var(--borde));
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 28px 56px -24px color-mix(in srgb, var(--primario) 40%, transparent);
+}
+.acceso-campo {
+  display: block; width: 100%; height: 3rem; padding: 0 .875rem; border: 1px solid var(--borde); border-radius: .625rem;
+  background: #fff; color: var(--tinta); font-size: 1rem; transition: border-color .15s, box-shadow .15s;
+}
+.acceso-campo:focus { outline: none; border-color: var(--primario); box-shadow: 0 0 0 4px color-mix(in srgb, var(--primario) 18%, transparent); }
+.acceso-ver {
+  position: absolute; right: .375rem; top: 50%; transform: translateY(-50%); height: 2.25rem; padding: 0 .75rem;
+  border-radius: .5rem; font-size: .875rem; font-weight: 600; color: var(--primario); background: transparent; cursor: pointer;
+}
+.acceso-ver:hover { background: color-mix(in srgb, var(--primario) 8%, transparent); }
+.acceso-ver:focus-visible { outline: 2px solid var(--primario); outline-offset: 1px; }
+.acceso-boton {
+  display: block; width: 100%; height: 3.25rem; border-radius: .75rem; font-size: 1.0625rem; font-weight: 600; color: #fff; cursor: pointer;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--primario) 86%, #fff) 0%, var(--primario) 55%, color-mix(in srgb, var(--primario) 88%, #000) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 10px 22px -10px color-mix(in srgb, var(--primario) 70%, transparent);
+  transition: filter .15s, transform .1s;
+}
+.acceso-boton:hover:not(:disabled) { filter: brightness(1.08); }
+.acceso-boton:active:not(:disabled) { transform: translateY(1px); }
+.acceso-boton:focus-visible { outline: 3px solid var(--acento); outline-offset: 2px; }
+.acceso-boton:disabled { opacity: .7; cursor: progress; }
+
 /* Lo que se anima responde a una acción de la persona; se respeta "reducir movimiento" */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }

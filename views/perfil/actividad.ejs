@@ -4,6 +4,7 @@
     login: 'Inicio de sesión', logout: 'Cierre de sesión', login_fallido: 'Intento fallido de inicio', cuenta_bloqueada: 'Cuenta bloqueada',
     cambiar_contrasena: 'Cambio de contraseña', cambio_contrasena_fallido: 'Cambio de contraseña fallido', recuperar_contrasena: 'Recuperación de contraseña',
     acceso_denegado: 'Acceso denegado', crear_venta: 'Venta registrada', exportar_estadisticas: 'Reporte exportado',
+    anular_venta: 'Factura anulada', marcar_factura_pagada: 'Factura cobrada',
   };
   const nombreAccion = (a) => nombres[a] || String(a).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
   const rojo = (a) => ['login_fallido', 'cuenta_bloqueada', 'acceso_denegado', 'cambio_contrasena_fallido'].indexOf(a) !== -1;
