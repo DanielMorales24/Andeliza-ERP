@@ -16,6 +16,7 @@ const BORDE = '#dfe2e8';
 const FONDO = '#f4f5f7';
 const VERDE = '#15803d';
 const AMBAR = '#b45309';
+const ROJO = '#b91c1c';
 
 const TITULOS = { fiscal: 'FACTURA', interno: 'COMPROBANTE INTERNO', cotizacion: 'COTIZACIÓN' };
 
@@ -112,6 +113,8 @@ function bloqueCliente(doc, y, d) {
   };
   if (d.tipo === 'cotizacion') {
     if (d.validez) dato('VÁLIDA HASTA', d.validez);
+  } else if (d.anulada) {
+    dato('ESTADO', 'Anulada', ROJO);
   } else if (d.estado) {
     dato('ESTADO DE PAGO', d.estado === 'C' ? 'Pagada' : 'Pendiente de pago', d.estado === 'C' ? VERDE : AMBAR);
   }
@@ -202,7 +205,9 @@ function totales(doc, y, d) {
     doc.font('Helvetica').fontSize(8).fillColor(GRIS).text('Los precios de los productos incluyen el impuesto.', x, y + 82, { width: w, align: 'right' });
   }
 
-  if (d.tipo !== 'cotizacion' && d.estado) {
+  if (d.anulada) {
+    sello(doc, 'ANULADA', ROJO, M + 105, y + 40);
+  } else if (d.tipo !== 'cotizacion' && d.estado) {
     sello(doc, d.estado === 'C' ? 'PAGADA' : 'PENDIENTE', d.estado === 'C' ? VERDE : AMBAR, M + 105, y + 40);
   }
   return y + alto;
@@ -256,11 +261,20 @@ function decorarPaginas(doc, d) {
     doc.switchToPage(i);
     doc.page.margins.bottom = 0; // sin esto, escribir en el pie crearía una hoja nueva
 
-    if (d.tipo === 'interno') {
+    // Una anulada lleva ANULADA al centro; si además es interna, NO FISCAL se corre hacia abajo
+    if (d.anulada) {
       doc.save();
       doc.rotate(-35, { origin: [ANCHO_PAGINA / 2, ALTO_PAGINA / 2] });
-      doc.fillOpacity(0.06).fillColor('#000000').font('Helvetica-Bold').fontSize(82);
-      doc.text('NO FISCAL', 0, ALTO_PAGINA / 2 - 40, { width: ANCHO_PAGINA, align: 'center', lineBreak: false });
+      doc.fillOpacity(0.09).fillColor(ROJO).font('Helvetica-Bold').fontSize(96);
+      doc.text('ANULADA', 0, ALTO_PAGINA / 2 - 48, { width: ANCHO_PAGINA, align: 'center', lineBreak: false });
+      doc.restore();
+    }
+    if (d.tipo === 'interno') {
+      const centro = d.anulada ? ALTO_PAGINA / 2 + 170 : ALTO_PAGINA / 2;
+      doc.save();
+      doc.rotate(-35, { origin: [ANCHO_PAGINA / 2, centro] });
+      doc.fillOpacity(0.06).fillColor('#000000').font('Helvetica-Bold').fontSize(d.anulada ? 56 : 82);
+      doc.text('NO FISCAL', 0, centro - (d.anulada ? 28 : 40), { width: ANCHO_PAGINA, align: 'center', lineBreak: false });
       doc.restore();
     }
 
@@ -296,6 +310,10 @@ function generar(datos) {
         y = franja(doc, y, 'COMPROBANTE INTERNO - No válido para crédito fiscal', '#92400e', '#fffbeb', '#f59e0b');
       } else if (datos.tipo === 'cotizacion') {
         y = franja(doc, y, 'COTIZACIÓN - Documento informativo, no es una factura', '#1f2430', FONDO, BORDE);
+      }
+      if (datos.anulada) {
+        const a = datos.anulada;
+        y = franja(doc, y, `DOCUMENTO ANULADO el ${a.fecha}${a.por ? ' por ' + a.por : ''}. Motivo: ${a.motivo}`, ROJO, '#fef2f2', '#fca5a5');
       }
       y = bloqueCliente(doc, y, datos);
       y = tabla(doc, y, datos);

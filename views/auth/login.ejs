@@ -1,38 +1,163 @@
-<main class="grid min-h-screen lg:grid-cols-2">
-  <section class="flex flex-col justify-between bg-primario px-8 py-8 text-white lg:px-14 lg:py-14">
-    <img src="<%= negocio.logoUrl %>" alt="" class="h-12 w-12 rounded bg-white object-contain p-1" onerror="this.remove()">
+<%
+  const inicial = String(negocio.nombre || '?').trim().charAt(0).toUpperCase();
+%>
+<main class="min-h-screen lg:grid lg:grid-cols-2">
+  <section class="relative flex min-h-[17rem] flex-col overflow-hidden bg-[color:var(--primario)] text-white sm:min-h-[19rem] lg:min-h-screen">
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_85%_15%,rgba(255,255,255,0.13),transparent_34%)]" aria-hidden="true"></div>
+    <div class="absolute -bottom-48 -right-36 h-[34rem] w-[34rem] rounded-full border border-white/10" aria-hidden="true"></div>
+    <div class="absolute -bottom-24 -right-12 h-[25rem] w-[25rem] rounded-full border border-white/10" aria-hidden="true"></div>
 
-    <div class="py-10 lg:py-0">
-      <h1 class="font-titulo text-5xl font-bold leading-none sm:text-6xl lg:text-7xl"><%= negocio.nombre %></h1>
-      <p class="mt-4 max-w-sm text-white/80">Ventas, inventario y finanzas en un solo lugar.</p>
+    <div class="relative z-10 flex min-h-[17rem] flex-col px-6 py-6 sm:min-h-[19rem] sm:px-8 sm:py-8 lg:min-h-screen lg:px-10 lg:py-9 xl:px-16 xl:py-12">
+      <div class="relative z-10 my-auto flex w-full flex-col items-start py-8 lg:py-12">
+        <div class="mb-8 flex w-full items-center gap-4 sm:gap-5 lg:mb-10">
+          <div class="grid h-20 w-20 flex-none place-items-center rounded-[1.75rem] bg-white p-3.5 shadow-2xl ring-1 ring-white/40 sm:h-24 sm:w-24 sm:p-4 xl:h-28 xl:w-28">
+            <img src="<%= negocio.logoUrl %>" alt="Logo de <%= negocio.nombre %>"
+                 class="h-full w-full object-contain drop-shadow-lg"
+                 onerror="this.hidden = true; this.nextElementSibling.hidden = false;">
+            <span class="font-titulo text-6xl font-bold text-[color:var(--primario)] sm:text-7xl" hidden aria-hidden="true"><%= inicial %></span>
+          </div>
+          <div class="min-w-0">
+            <p class="max-w-full break-words font-titulo text-2xl font-bold leading-tight sm:text-3xl xl:text-4xl"><%= negocio.nombre %></p>
+            <p class="mt-2 text-[0.65rem] font-medium tracking-[0.14em] text-white/70 sm:text-xs xl:text-sm">SISTEMA DE GESTIÓN EMPRESARIAL</p>
+          </div>
+        </div>
+
+        <div class="w-full max-w-2xl">
+          <h1 class="font-titulo text-3xl font-bold leading-[1.04] tracking-tight sm:text-4xl lg:text-5xl xl:text-6xl">
+            Tu negocio bajo control. Todo en <span class="text-white/70">un solo lugar.</span>
+          </h1>
+          <p class="mt-4 max-w-lg text-sm leading-relaxed text-white/75 sm:text-base lg:mt-6 xl:text-lg">
+            Administra tus ventas, inventario, clientes y finanzas desde una sola plataforma en la nube.
+          </p>
+          <div class="mt-5 flex min-h-7 items-center gap-1.5 font-titulo text-lg font-semibold sm:mt-6 sm:text-xl xl:text-2xl"
+               x-data="{ texto: '', frase: 'La información que necesitas, cuando la necesitas.', async escribir() { for (const letra of this.frase) { this.texto += letra; await new Promise(resolve => setTimeout(resolve, 90)); } } }"
+               x-init="escribir()">
+            <span x-text="texto" aria-live="polite"></span>
+            <span class="h-5 w-px animate-pulse bg-[color:var(--acento)] sm:h-6 xl:h-7" aria-hidden="true"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hidden items-center gap-3 text-sm text-white/60 sm:flex">
+        <span class="h-px w-8 bg-[color:var(--acento)]" aria-hidden="true"></span>
+        <span>Andeliza ERP</span>
+        <span aria-hidden="true">·</span>
+        <span>Gestión que avanza contigo.</span>
+      </div>
+
+      <div class="pointer-events-none absolute bottom-28 right-10 h-40 w-40 rounded-full bg-[color:var(--acento)] opacity-10 blur-3xl xl:right-16" aria-hidden="true"></div>
     </div>
-
-    <div class="h-1.5 w-24 bg-acento"></div>
   </section>
 
-  <section class="flex items-center justify-center px-6 py-12">
-    <form method="post" action="/login" class="w-full max-w-sm">
-      <h2 class="font-titulo text-3xl font-semibold">Iniciar sesión</h2>
+  <section class="flex min-h-[calc(100vh-17rem)] flex-col items-center justify-center bg-gray-50 px-5 py-10 sm:px-8 lg:min-h-screen lg:px-10">
+    <form method="post" action="/login"
+          class="relative w-full max-w-md rounded-2xl border border-black/5 bg-white px-6 py-8 shadow-2xl transition-shadow hover:shadow-black/25 sm:px-9 sm:py-10"
+          x-data="{ ver: false, mayus: false, enviando: false }" @submit="enviando = true"
+          @pageshow.window="enviando = false">
+      <div class="absolute inset-x-0 top-0 h-1 rounded-t-2xl bg-[color:var(--acento)]" aria-hidden="true"></div>
+
+      <p class="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--primario)]">Acceso a tu cuenta</p>
+      <h2 class="font-titulo text-3xl font-semibold leading-tight text-black/90 sm:text-4xl">Bienvenido de nuevo</h2>
+      <p class="mt-2 text-sm leading-relaxed text-black/60 sm:text-base">Ingresa a tu espacio de trabajo y continúa administrando tu negocio.</p>
 
       <% if (exito) { %>
-        <div role="status" class="mt-4 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"><%= exito %></div>
+        <div role="status" class="mt-5 rounded-lg border border-black/10 bg-black/5 px-3 py-2.5 text-sm text-black/80"><%= exito %></div>
       <% } %>
 
       <% if (error) { %>
-        <div role="alert" class="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"><%= error %></div>
+        <div role="alert" class="mt-5 rounded-lg border border-black/10 bg-black/5 px-3 py-2.5 text-sm text-black/80"><%= error %></div>
       <% } %>
 
-      <label for="usuario" class="mt-6 block text-sm font-medium">Usuario</label>
-      <input id="usuario" name="usuario" type="text" value="<%= usuario %>" required autofocus
-             autocomplete="username" autocapitalize="none" spellcheck="false"
-             class="mt-1 w-full rounded border border-borde bg-white px-3 py-2.5 focus:border-primario focus:outline-none focus:ring-2 focus:ring-primario/30">
+      <div class="mt-7" x-data="{ escribiendo: false, temporizador: null, marcarEscritura() { this.escribiendo = true; clearTimeout(this.temporizador); this.temporizador = setTimeout(() => this.escribiendo = false, 500); } }">
+        <div class="flex min-h-5 items-center justify-between">
+          <label for="usuario" class="block text-sm font-medium text-black/80">Usuario</label>
+          <span x-show="escribiendo" x-cloak x-transition.opacity class="inline-flex items-center gap-1.5 text-xs text-[color:var(--primario)]" aria-hidden="true">
+            <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-[color:var(--primario)]"></span>Escribiendo
+          </span>
+        </div>
+        <div class="relative mt-2">
+        <svg :class="escribiendo ? 'scale-110 text-[color:var(--primario)]' : 'text-black/40'" class="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 transition duration-200" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.1a7.5 7.5 0 0 1 15 0A17.9 17.9 0 0 1 12 21.75c-2.67 0-5.2-.58-7.5-1.65Z"/>
+        </svg>
+        <input id="usuario" name="usuario" type="text" value="<%= usuario %>" required <%= error ? '' : 'autofocus' %>
+               autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Usuario"
+               @input="marcarEscritura()"
+               class="w-full rounded-lg border border-black/10 bg-white py-3.5 pl-11 pr-3 text-base text-black/90 placeholder:text-black/35 shadow-sm transition focus:border-[color:var(--primario)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primario)]/20">
+        </div>
+      </div>
 
-      <label for="contrasena" class="mt-4 block text-sm font-medium">Contraseña</label>
-      <input id="contrasena" name="contrasena" type="password" required autocomplete="current-password"
-             class="mt-1 w-full rounded border border-borde bg-white px-3 py-2.5 focus:border-primario focus:outline-none focus:ring-2 focus:ring-primario/30">
+      <div class="mt-5" x-data="{ escribiendo: false, temporizador: null, marcarEscritura() { this.escribiendo = true; clearTimeout(this.temporizador); this.temporizador = setTimeout(() => this.escribiendo = false, 500); } }">
+        <div class="flex min-h-5 items-center justify-between">
+          <label for="contrasena" class="block text-sm font-medium text-black/80">Contraseña</label>
+          <span x-show="escribiendo" x-cloak x-transition.opacity class="inline-flex items-center gap-1.5 text-xs text-[color:var(--primario)]" aria-hidden="true">
+            <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-[color:var(--primario)]"></span>Escribiendo
+          </span>
+        </div>
+        <div class="relative mt-2">
+        <svg :class="escribiendo ? 'scale-110 text-[color:var(--primario)]' : 'text-black/40'" class="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 transition duration-200" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 0h10.5c.83 0 1.5.67 1.5 1.5v7.5c0 .83-.67 1.5-1.5 1.5H6.75c-.83 0-1.5-.67-1.5-1.5V12c0-.83.67-1.5 1.5-1.5Z"/>
+        </svg>
+        <input id="contrasena" name="contrasena" :type="ver ? 'text' : 'password'" type="password" required autocomplete="current-password"
+               placeholder="••••••••" <%= error ? 'autofocus' : '' %>
+               @keydown="mayus = $event.getModifierState && $event.getModifierState('CapsLock')" @keyup="mayus = $event.getModifierState && $event.getModifierState('CapsLock')"
+               @input="marcarEscritura()"
+               class="w-full rounded-lg border border-black/10 bg-white py-3.5 pl-11 pr-12 text-base text-black/90 placeholder:text-black/35 shadow-sm transition focus:border-[color:var(--primario)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primario)]/20">
+        <button type="button" @click="ver = !ver; $nextTick(() => document.getElementById('contrasena').focus())"
+                class="absolute right-1.5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-md text-black/45 transition duration-200 hover:rotate-6 hover:scale-110 hover:bg-black/5 hover:text-black/80 active:rotate-12 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primario)]"
+                :aria-pressed="ver" :aria-label="ver ? 'Ocultar contraseña' : 'Mostrar contraseña'" aria-controls="contrasena">
+          <svg x-show="ver" x-cloak
+               x-transition:enter="transition ease-out duration-300"
+               x-transition:enter-start="opacity-0 scale-50 rotate-[-35deg]"
+               x-transition:enter-end="opacity-100 scale-100 rotate-0"
+               x-transition:leave="transition ease-in duration-150"
+               x-transition:leave-start="opacity-100 scale-100 rotate-0"
+               x-transition:leave-end="opacity-0 scale-50 rotate-[35deg]"
+               xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 origin-center" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M2.25 12s3.5-6.75 9.75-6.75S21.75 12 21.75 12 18.25 18.75 12 18.75 2.25 12 2.25 12Z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+          </svg>
+          <svg x-show="!ver" x-cloak
+               x-transition:enter="transition ease-out duration-300"
+               x-transition:enter-start="opacity-0 scale-50 rotate-[-35deg]"
+               x-transition:enter-end="opacity-100 scale-100 rotate-0"
+               x-transition:leave="transition ease-in duration-150"
+               x-transition:leave-start="opacity-100 scale-100 rotate-0"
+               x-transition:leave-end="opacity-0 scale-50 rotate-[35deg]"
+               xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 origin-center" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="m3 3 18 18M10.58 10.59a2 2 0 0 0 2.83 2.83"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M9.88 5.24A10.8 10.8 0 0 1 12 5.04c6.25 0 9.75 6.96 9.75 6.96a16.9 16.9 0 0 1-3.05 3.77M6.23 6.23C3.68 8.02 2.25 12 2.25 12S5.75 18.96 12 18.96c1.01 0 1.94-.2 2.78-.54"/>
+          </svg>
+        </button>
+        </div>
+      </div>
+      <p x-show="mayus" x-cloak x-transition.opacity.duration.150ms class="mt-2 inline-flex rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-800" role="status">Las mayúsculas están activadas.</p>
 
-      <button type="submit" class="mt-6 w-full rounded bg-primario px-4 py-2.5 font-semibold text-white hover:brightness-110">Entrar</button>
-      <p class="mt-4 text-center text-sm text-gray-600"><a href="/recuperar" class="font-medium text-primario hover:underline">¿Olvidaste tu contraseña? Usa un código de recuperación</a></p>
+      <div class="mt-3 flex justify-end">
+        <a href="/recuperar" class="text-sm font-medium text-[color:var(--primario)] underline-offset-2 hover:underline">¿Olvidaste tu contraseña?</a>
+      </div>
+
+      <button type="submit"
+              class="mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-lg bg-[color:var(--primario)] px-4 py-3.5 font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:brightness-110 hover:shadow-xl disabled:cursor-progress disabled:opacity-70"
+              :disabled="enviando">
+        <span x-show="!enviando">Acceder</span>
+        <span x-show="enviando" x-cloak class="inline-flex items-center gap-2" aria-live="polite">
+          <svg class="h-5 w-5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4Zm2 5.291A7.962 7.962 0 0 1 4 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647Z"></path>
+          </svg>
+          Entrando...
+        </span>
+      </button>
+      <div class="mt-6 flex items-center justify-center gap-2 border-t border-black/5 pt-5 text-xs text-black/50">
+        <svg class="h-4 w-4 text-[color:var(--primario)]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 0h10.5c.83 0 1.5.67 1.5 1.5v7.5c0 .83-.67 1.5-1.5 1.5H6.75c-.83 0-1.5-.67-1.5-1.5V12c0-.83.67-1.5 1.5-1.5Z"/>
+        </svg>
+        Tus datos están protegidos.
+      </div>
     </form>
+
+    <p class="mt-6 text-center text-xs text-black/45 lg:absolute lg:bottom-6">
+      Acceso protegido · <%= negocio.nombre %>
+    </p>
   </section>
 </main>

@@ -1,6 +1,6 @@
 <script type="application/json" id="datos-pagina"><%- JSON.stringify(datos).replace(/</g, '\\u003c') %></script>
 
-<div x-data="facturas" @keydown.escape.window="cancelarPago()">
+<div x-data="facturas" @keydown.escape.window="cancelarPago(); cancelarAnulacion()">
 
   <!-- ===== Filtros ===== -->
   <section class="rounded-md border border-borde bg-white p-4" aria-label="Filtros">
@@ -36,9 +36,10 @@
         <option value="interno">Solo internas</option>
       </select>
       <select x-model="f.estado" class="campo h-11 sm:w-auto" aria-label="Estado de pago">
-        <option value="">Pagadas y pendientes</option>
+        <option value="">Todas</option>
         <option value="P">Solo pendientes</option>
         <option value="C">Solo pagadas</option>
+        <option value="A">Solo anuladas</option>
       </select>
     </div>
 
@@ -53,6 +54,10 @@
     </p>
     <p><span class="text-gray-600">Total: </span><span class="font-medium tabular-nums" x-text="dinero(resumen.suma)"></span></p>
     <p x-show="resumen.pendiente > 0" x-cloak><span class="text-gray-600">Pendiente de cobro: </span><span class="font-medium tabular-nums text-amber-700" x-text="dinero(resumen.pendiente)"></span></p>
+    <p x-show="resumen.anuladas > 0 && f.estado !== 'A'" x-cloak class="text-gray-600" data-resumen-anuladas>
+      <span class="font-medium text-red-700 tabular-nums" x-text="resumen.anuladas"></span>
+      <span x-text="resumen.anuladas == 1 ? 'anulada (no suma al total)' : 'anuladas (no suman al total)'"></span>
+    </p>
     <p class="text-gray-500" x-show="cargando" x-cloak>Actualizando…</p>
   </div>
 
@@ -86,17 +91,28 @@
             <td class="max-w-[14rem] truncate px-4 py-3" :class="fila.cliente === 'Consumidor Final' ? 'text-gray-500' : ''" x-text="fila.cliente"></td>
             <td class="px-4 py-3"><span class="insignia" :class="fila.tipo_documento === 'fiscal' ? 'ins-marca' : 'ins-neutra'" x-text="fila.tipo_documento === 'fiscal' ? 'Fiscal' : 'Interna'"></span></td>
             <td class="px-4 py-3">
-              <span class="insignia" :class="fila.estado === 'C' ? 'ins-ok' : 'ins-bajo'"><i></i><span x-text="fila.estado === 'C' ? 'Pagada' : 'Pendiente'"></span></span>
-              <span class="mt-0.5 block text-xs text-gray-500 tabular-nums" x-show="fila.estado === 'P'">Saldo <span x-text="dinero(fila.saldo)"></span></span>
-              <span class="mt-0.5 block text-xs text-gray-500" x-show="fila.estado === 'C' && fila.metodo_nombre" data-metodo-fila x-text="fila.metodo_nombre"></span>
+              <template x-if="fila.anulada">
+                <div :title="'Motivo: ' + fila.motivo_anulacion">
+                  <span class="insignia ins-agotado" data-insignia-anulada><i></i><span>Anulada</span></span>
+                  <span class="mt-0.5 block max-w-[12rem] truncate text-xs text-gray-500" x-text="fila.anulada_texto"></span>
+                </div>
+              </template>
+              <template x-if="!fila.anulada">
+                <div>
+                  <span class="insignia" :class="fila.estado === 'C' ? 'ins-ok' : 'ins-bajo'"><i></i><span x-text="fila.estado === 'C' ? 'Pagada' : 'Pendiente'"></span></span>
+                  <span class="mt-0.5 block text-xs text-gray-500 tabular-nums" x-show="fila.estado === 'P'">Saldo <span x-text="dinero(fila.saldo)"></span></span>
+                  <span class="mt-0.5 block text-xs text-gray-500" x-show="fila.estado === 'C' && fila.metodo_nombre" data-metodo-fila x-text="fila.metodo_nombre"></span>
+                </div>
+              </template>
             </td>
-            <td class="whitespace-nowrap px-4 py-3 text-right font-medium tabular-nums" x-text="dinero(fila.total)"></td>
+            <td class="whitespace-nowrap px-4 py-3 text-right font-medium tabular-nums" :class="fila.anulada ? 'text-gray-400 line-through' : ''" x-text="dinero(fila.total)"></td>
             <td class="px-4 py-3">
               <div class="ml-auto flex max-w-[15.5rem] flex-wrap items-center justify-end gap-x-0.5 gap-y-1 whitespace-nowrap">
                 <a :href="'/facturas/' + fila.id + '/pdf'" target="_blank" rel="noopener" class="btn-texto">Ver PDF</a>
                 <a :href="'/facturas/' + fila.id + '/pdf?descargar=1'" class="btn-texto apagar">Descargar</a>
-                <button type="button" class="btn-texto" x-show="fila.estado === 'P' && (d.permisos || {}).marcarPagada" @click="pedirPago(fila)">Marcar pagada</button>
+                <button type="button" class="btn-texto" x-show="fila.estado === 'P' && !fila.anulada && (d.permisos || {}).marcarPagada" @click="pedirPago(fila)">Marcar pagada</button>
                 <a :href="'/finanzas/partidas?venta=' + fila.id" class="btn-texto apagar" x-show="fila.tiene_partida && (d.permisos || {}).verAsiento" data-ver-asiento>Ver asiento contable</a>
+                <button type="button" class="btn-texto peligro" x-show="!fila.anulada && (d.permisos || {}).anular" @click="pedirAnulacion(fila)" data-anular>Anular</button>
               </div>
             </td>
           </tr>
@@ -114,20 +130,23 @@
             <p class="font-medium tabular-nums" x-text="fila.numero_corto"></p>
             <p class="text-xs text-gray-500 tabular-nums" x-text="fila.fecha_texto"></p>
           </div>
-          <p class="flex-none font-titulo text-xl font-semibold tabular-nums" x-text="dinero(fila.total)"></p>
+          <p class="flex-none font-titulo text-xl font-semibold tabular-nums" :class="fila.anulada ? 'text-gray-400 line-through' : ''" x-text="dinero(fila.total)"></p>
         </div>
         <p class="mt-2 truncate text-sm" :class="fila.cliente === 'Consumidor Final' ? 'text-gray-500' : ''" x-text="fila.cliente"></p>
         <div class="mt-2 flex flex-wrap gap-1.5">
           <span class="insignia" :class="fila.tipo_documento === 'fiscal' ? 'ins-marca' : 'ins-neutra'" x-text="fila.tipo_documento === 'fiscal' ? 'Fiscal' : 'Interna'"></span>
-          <span class="insignia" :class="fila.estado === 'C' ? 'ins-ok' : 'ins-bajo'"><i></i><span x-text="fila.estado === 'C' ? 'Pagada' : 'Pendiente'"></span></span>
-          <span class="text-xs text-gray-500 tabular-nums self-center" x-show="fila.estado === 'P'" x-text="'Saldo ' + dinero(fila.saldo)"></span>
-          <span class="text-xs text-gray-500 self-center" x-show="fila.estado === 'C' && fila.metodo_nombre" x-text="fila.metodo_nombre"></span>
+          <span class="insignia ins-agotado" x-show="fila.anulada"><i></i><span>Anulada</span></span>
+          <span class="insignia" x-show="!fila.anulada" :class="fila.estado === 'C' ? 'ins-ok' : 'ins-bajo'"><i></i><span x-text="fila.estado === 'C' ? 'Pagada' : 'Pendiente'"></span></span>
+          <span class="text-xs text-gray-500 tabular-nums self-center" x-show="fila.estado === 'P' && !fila.anulada" x-text="'Saldo ' + dinero(fila.saldo)"></span>
+          <span class="text-xs text-gray-500 self-center" x-show="fila.estado === 'C' && !fila.anulada && fila.metodo_nombre" x-text="fila.metodo_nombre"></span>
         </div>
+        <p class="mt-2 text-xs text-gray-600" x-show="fila.anulada" x-text="'Anulada el ' + fila.anulada_texto + ': ' + fila.motivo_anulacion"></p>
         <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-borde pt-3">
           <a :href="'/facturas/' + fila.id + '/pdf'" target="_blank" rel="noopener" class="btn btn-secundario h-11 flex-1">Ver PDF</a>
           <a :href="'/facturas/' + fila.id + '/pdf?descargar=1'" class="btn btn-secundario h-11 flex-1">Descargar</a>
-          <button type="button" class="btn btn-primario h-11 w-full" x-show="fila.estado === 'P' && (d.permisos || {}).marcarPagada" @click="pedirPago(fila)">Marcar como pagada</button>
+          <button type="button" class="btn btn-primario h-11 w-full" x-show="fila.estado === 'P' && !fila.anulada && (d.permisos || {}).marcarPagada" @click="pedirPago(fila)">Marcar como pagada</button>
           <a :href="'/finanzas/partidas?venta=' + fila.id" class="btn-texto" x-show="fila.tiene_partida && (d.permisos || {}).verAsiento">Ver asiento contable</a>
+          <button type="button" class="btn-texto peligro ml-auto" x-show="!fila.anulada && (d.permisos || {}).anular" @click="pedirAnulacion(fila)">Anular factura</button>
         </div>
       </article>
     </template>
@@ -171,6 +190,51 @@
         </div>
       </template>
     </div>
+  </div>
+
+  <!-- ===== Anular factura ===== -->
+  <div x-show="anulacion" x-cloak class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="anular-titulo" id="modal-anular-factura">
+    <div class="absolute inset-0 bg-tinta/50" @click="cancelarAnulacion()"></div>
+    <form x-show="anulacion" @submit.prevent="confirmarAnulacion()" class="relative max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-lg">
+      <template x-if="anulacion">
+        <div>
+          <h2 id="anular-titulo" class="font-titulo text-xl font-semibold">¿Anular la factura <span class="tabular-nums" x-text="anulacion.fila.numero_corto"></span>?</h2>
+          <p class="mt-1 text-sm text-gray-600">
+            <span class="font-medium text-tinta" x-text="anulacion.fila.cliente"></span> ·
+            <span class="font-medium text-tinta tabular-nums" x-text="dinero(anulacion.fila.total)"></span> ·
+            <span x-text="anulacion.fila.fecha_texto"></span>
+          </p>
+
+          <div x-show="anulacion.fila.tiene_abonos" role="alert" class="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-anular-con-abonos>
+            Esta factura tiene cobros registrados. Anula primero esos cobros en <span class="font-medium">Finanzas → Cuentas por cobrar</span> y vuelve a intentarlo.
+          </div>
+
+          <ul class="mt-4 space-y-2 text-sm text-gray-700" x-show="!anulacion.fila.tiene_abonos">
+            <li class="flex gap-2"><span aria-hidden="true" class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-primario"></span><span><span class="font-medium text-tinta">No se borra nada.</span> La factura queda en el historial marcada como Anulada, con el motivo y quién la anuló.</span></li>
+            <li class="flex gap-2"><span aria-hidden="true" class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-primario"></span><span>Los productos vendidos <span class="font-medium text-tinta">vuelven al inventario</span> (en los kits, cada componente).</span></li>
+            <li class="flex gap-2"><span aria-hidden="true" class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-primario"></span><span>Si la venta tiene asiento contable, se registra su <span class="font-medium text-tinta">contrapartida exacta</span> (el Debe y el Haber invertidos).</span></li>
+            <li class="flex gap-2" x-show="anulacion.fila.tipo_documento === 'fiscal'"><span aria-hidden="true" class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-amber-500"></span><span>Es un documento fiscal: su número no se vuelve a usar. Si ya se lo entregaste al cliente, consulta con tu contador si corresponde emitir una nota de crédito.</span></li>
+          </ul>
+
+          <div x-show="!anulacion.fila.tiene_abonos">
+            <label class="etiqueta mt-4" for="anular-motivo">Motivo de la anulación</label>
+            <textarea id="anular-motivo" class="campo min-h-[5rem]" maxlength="300" x-model="anulacion.motivo"
+                      placeholder="Por ejemplo: se cobró el producto equivocado" aria-describedby="anular-motivo-ayuda"></textarea>
+            <p id="anular-motivo-ayuda" class="mt-1 flex justify-between gap-3 text-xs text-gray-500">
+              <span>Mínimo 5 caracteres. Queda guardado en la bitácora.</span><span class="tabular-nums" x-text="anulacion.motivo.length + '/300'"></span>
+            </p>
+          </div>
+
+          <div x-show="anulacion.error" role="alert" class="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="anulacion.error"></div>
+
+          <div class="mt-5 flex gap-2" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
+            <button type="button" class="btn btn-secundario flex-1" @click="cancelarAnulacion()" :disabled="anulacion.guardando" x-text="anulacion.fila.tiene_abonos ? 'Entendido' : 'Cancelar'"></button>
+            <button type="submit" x-show="!anulacion.fila.tiene_abonos" class="btn flex-1 border border-red-700 bg-red-700 text-white hover:bg-red-800" data-confirmar-anular
+                    :disabled="anulacion.guardando || anulacion.motivo.trim().length < 5" x-text="anulacion.guardando ? 'Anulando…' : 'Sí, anular factura'"></button>
+          </div>
+        </div>
+      </template>
+    </form>
   </div>
 </div>
 

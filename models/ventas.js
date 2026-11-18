@@ -11,12 +11,14 @@ async function obtener(id) {
   const { rows } = await db.query(
     `SELECT v.id, v.numero_factura, v.tipo_documento, v.estado, v.subtotal, v.impuesto, v.total,
             v.creado_en, v.usuario_id, v.cliente_id, v.fecha_vencimiento, v.metodo_pago,
+            v.anulada, v.anulada_en, v.motivo_anulacion, ua.nombre AS anulada_por_nombre,
             c.nombre AS cliente_nombre, c.rtn AS cliente_rtn, c.telefono AS cliente_telefono,
             c.direccion AS cliente_direccion, c.correo AS cliente_correo,
             u.nombre AS vendedor
        FROM ventas v
        LEFT JOIN clientes c ON c.id = v.cliente_id
        LEFT JOIN usuarios u ON u.id = v.usuario_id
+       LEFT JOIN usuarios ua ON ua.id = v.anulada_por
       WHERE v.id = $1`, [id]
   );
   if (!rows[0]) return null;
@@ -170,7 +172,9 @@ async function listar(filtros) {
   if (hasta) cond.push(`v.creado_en < (((${param(hasta)}::date + 1))::timestamp AT TIME ZONE ${zona()})`);
   if (soloUsuarioId) cond.push(`v.usuario_id = ${param(soloUsuarioId)}`);   // quien solo ve lo propio
   if (tipo) cond.push(`v.tipo_documento = ${param(tipo)}`);
-  if (estado) cond.push(`v.estado = ${param(estado)}`);
+  // Una factura anulada conserva su estado de pago de ese momento, pero ya no cuenta como pagada ni pendiente
+  if (estado === 'A') cond.push('v.anulada');
+  else if (estado) cond.push(`v.estado = ${param(estado)} AND NOT v.anulada`);
   if (q) {
     const patron = param('%' + q.replace(/[\\%_]/g, '\\$&') + '%');
     cond.push(`(${SIN_ACENTOS('v.numero_factura')} LIKE ${patron} ESCAPE '\\'
@@ -180,15 +184,17 @@ async function listar(filtros) {
   const desdeSql = `FROM ventas v LEFT JOIN clientes c ON c.id = v.cliente_id LEFT JOIN usuarios u ON u.id = v.usuario_id ${donde}`;
 
   const resumen = (await db.query(
-    `SELECT COUNT(*) AS cantidad, COALESCE(SUM(v.total), 0) AS suma,
-            COALESCE(SUM(v.total) FILTER (WHERE v.estado = 'P'), 0) AS pendiente ${desdeSql}`, params
+    `SELECT COUNT(*) AS cantidad, COALESCE(SUM(v.total) FILTER (WHERE NOT v.anulada), 0) AS suma,
+            COALESCE(SUM(v.total) FILTER (WHERE v.estado = 'P' AND NOT v.anulada), 0) AS pendiente,
+            COUNT(*) FILTER (WHERE v.anulada) AS anuladas ${desdeSql}`, params
   )).rows[0];
 
   const filas = (await db.query(
     `SELECT v.id, v.numero_factura, v.tipo_documento, v.estado, v.subtotal, v.impuesto, v.total, v.creado_en, v.fecha_vencimiento,
-            v.metodo_pago,
+            v.metodo_pago, v.anulada, v.anulada_en, v.motivo_anulacion,
             EXISTS (SELECT 1 FROM partidas p WHERE p.origen_tipo = 'venta' AND p.origen_id = v.id) AS tiene_partida,
-            CASE WHEN v.estado = 'P'
+            EXISTS (SELECT 1 FROM abonos_clientes a WHERE a.venta_id = v.id AND NOT a.anulado) AS tiene_abonos,
+            CASE WHEN v.estado = 'P' AND NOT v.anulada
                  THEN ROUND(v.total - COALESCE((SELECT SUM(a.monto) FROM abonos_clientes a WHERE a.venta_id = v.id AND NOT a.anulado), 0), 2)
                  ELSE 0 END AS saldo,
             COALESCE(c.nombre, 'Consumidor Final') AS cliente, u.nombre AS vendedor
@@ -205,31 +211,45 @@ async function listar(filtros) {
 // Con la contabilidad iniciada registra un abono (el efectivo entra a Caja; tarjeta, transferencia
 // y cheque, a Bancos) y baja Cuentas por cobrar; si no, solo cambia el estado. En los dos casos
 // guarda el método en la venta si todavía no tenía uno (era una venta al crédito).
-// Devuelve 'pagada', 'ya_estaba_pagada' o null si no existe.
+// Devuelve 'pagada', 'ya_estaba_pagada', 'anulada' o null si no existe.
 async function marcarPagada(id, usuarioId, metodo = 'efectivo') {
   const inicio = (await db.query('SELECT contabilidad_inicio FROM configuracion_negocio WHERE id = 1')).rows[0];
   if (inicio && inicio.contabilidad_inicio) {
-    const v = (await db.query('SELECT estado FROM ventas WHERE id = $1', [id])).rows[0];
+    const v = (await db.query('SELECT estado, anulada FROM ventas WHERE id = $1', [id])).rows[0];
     if (!v) return null;
+    if (v.anulada) return 'anulada';
     if (v.estado === 'C') return 'ya_estaba_pagada';
     const cuenta = (await db.query('SELECT cuenta_metodo_pago($1) AS clave', [metodo])).rows[0].clave;
     try {
       const saldo = (await db.query("SELECT saldo FROM v_cxc WHERE origen = 'venta' AND doc_id = $1", [id])).rows[0];
-      if (!saldo) return 'ya_estaba_pagada';   // entre las dos lecturas otra persona la cobró
+      if (!saldo) {   // entre las dos lecturas otra persona la cobró o la anuló
+        const w = (await db.query('SELECT anulada FROM ventas WHERE id = $1', [id])).rows[0];
+        return w && w.anulada ? 'anulada' : 'ya_estaba_pagada';
+      }
       await db.query('SELECT registrar_abono_cliente($1, NULL, $2, NULL, $3, $4, $5)', [id, saldo.saldo, cuenta, 'Cobro registrado desde Facturas', usuarioId || null]);
       await db.query('UPDATE ventas SET metodo_pago = $2 WHERE id = $1 AND metodo_pago IS NULL', [id, metodo]);
       return 'pagada';
     } catch (err) {
       if (err.code === 'P0001' && /ya está pagada/.test(err.message)) return 'ya_estaba_pagada'; // otra persona la cobró justo antes
+      if (err.code === 'P0001' && /está anulada/.test(err.message)) return 'anulada';              // otra persona la anuló justo antes
       throw err;
     }
   }
   const { rowCount } = await db.query(
-    "UPDATE ventas SET estado = 'C', metodo_pago = COALESCE(metodo_pago, $2) WHERE id = $1 AND estado = 'P'", [id, metodo]
+    "UPDATE ventas SET estado = 'C', metodo_pago = COALESCE(metodo_pago, $2) WHERE id = $1 AND estado = 'P' AND NOT anulada", [id, metodo]
   );
   if (rowCount > 0) return 'pagada';
-  const { rows } = await db.query('SELECT estado FROM ventas WHERE id = $1', [id]);
-  return rows[0] ? 'ya_estaba_pagada' : null;
+  const { rows } = await db.query('SELECT estado, anulada FROM ventas WHERE id = $1', [id]);
+  if (!rows[0]) return null;
+  return rows[0].anulada ? 'anulada' : 'ya_estaba_pagada';
 }
 
-module.exports = { obtener, crear, cotizar, listar, marcarPagada, idPorClave };
+// Anula una factura sin borrar nada: la función de la base devuelve el stock, revierte el asiento
+// con su contrapartida exacta y deja la constancia en la bitácora. Los errores de negocio llegan
+// como P0001 con un mensaje para la persona.
+async function anular(id, usuarioId, motivo, ip) {
+  const { rows } = await db.query('SELECT anular_venta($1, $2, $3, $4) AS r', [id, usuarioId, motivo, ip || null]);
+  return rows[0].r;
+}
+
+module.exports = { obtener, crear, cotizar, listar, marcarPagada, anular, idPorClave };

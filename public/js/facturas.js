@@ -18,6 +18,7 @@ document.addEventListener('alpine:init', function () {
       confirmar: null,
       pagando: false,
       metodoCobro: 'efectivo',
+      anulacion: null,   // { fila, motivo, guardando, error }
       secuencia: 0,
       temporizador: null,
 
@@ -120,6 +121,34 @@ document.addEventListener('alpine:init', function () {
           toast(e.message, 'error');
         } finally {
           this.pagando = false;
+        }
+      },
+
+      // ---- Anular factura ----
+      pedirAnulacion(fila) {
+        this.anulacion = { fila: fila, motivo: '', guardando: false, error: '' };
+        // El campo vive dentro de un x-if: se enfoca cuando la ventana ya terminó de mostrarse
+        if (!fila.tiene_abonos) setTimeout(() => { const el = document.getElementById('anular-motivo'); if (el) el.focus(); }, 60);
+      },
+      cancelarAnulacion() { if (this.anulacion && !this.anulacion.guardando) this.anulacion = null; },
+      async confirmarAnulacion() {
+        const a = this.anulacion;
+        if (!a || a.guardando || a.fila.tiene_abonos) return;
+        const motivo = a.motivo.trim();
+        if (motivo.length < 5) { a.error = 'Escribe el motivo de la anulación (al menos 5 caracteres).'; return; }
+        a.guardando = true;
+        a.error = '';
+        try {
+          const r = await api('/facturas/' + a.fila.id + '/anular', { method: 'POST', body: { motivo: motivo } });
+          this.anulacion = null;
+          let mensaje = 'Factura ' + a.fila.numero_corto + ' anulada. El stock volvió al inventario';
+          if (r.contabilidad === 'revertida') mensaje += ' y se registró la contrapartida contable';
+          toast(mensaje + '.');
+          this.cargar(true);   // el resumen y la fila salen recalculados por el servidor
+        } catch (e) {
+          a.error = e.message;
+        } finally {
+          a.guardando = false;
         }
       },
     };
