@@ -28,7 +28,8 @@ Una pyme hondureña puede tener un sistema contable y de ventas profesional sin 
 - **Roles y permisos granulares.** Cuatro roles de fábrica (administrador, supervisor, vendedor y contador) y los que el administrador cree, con una matriz de permisos por módulo y acción. El servidor bloquea cada ruta (403), el vendedor solo ve sus propias facturas y todo queda en una auditoría que no se puede alterar. Ver [docs/permisos.md](docs/permisos.md).
 - **Estadísticas para decidir.** Una pantalla con indicadores comparados contra el período anterior, seis gráficos, insights redactados con datos reales (qué se vende, cuándo, quién y con qué margen) y un ranking de vendedores, con reporte en PDF. Ver [docs/referencia-tecnica.md](docs/referencia-tecnica.md).
 - **Ventas, inventario y finanzas conectados.** Una venta descuenta el stock, genera su asiento contable y, si queda a crédito, aparece sola en cuentas por cobrar con su vencimiento.
-- **Contabilidad que el usuario no tiene que hacer.** Cada venta, compra, gasto, cobro y pago genera su partida doble. El dueño ve caja y bancos, lo que le deben, lo que debe y su utilidad del mes, y descarga el estado de resultados, el flujo de caja, el balance general y la antigüedad de saldos en PDF.
+- **Contabilidad que el usuario no tiene que hacer.** Cada venta, compra, gasto, cobro y pago genera su partida doble, y la venta va a Caja o a Bancos según cómo se pagó (efectivo, tarjeta o transferencia). El dueño ve caja y bancos, lo que le deben, lo que debe y su utilidad del mes, y descarga el estado de resultados, el flujo de caja, el balance general y la antigüedad de saldos en PDF.
+- **Corregir sin borrar.** Una factura hecha por error se anula: vuelve el stock, se registra la contrapartida contable exacta y queda en el historial y en la auditoría con su motivo. Ver [docs/decisiones/003-anulacion-por-contrapartida.md](docs/decisiones/003-anulacion-por-contrapartida.md).
 - **Hecho para quien no es técnico.** Formularios guiados, validaciones con mensajes claros y una interfaz que se adapta al celular.
 - **Un archivo para adaptarlo a cada negocio.** Nombre, colores, módulos activos y unidades se definen en `client.config.js`.
 
@@ -38,13 +39,13 @@ Una pyme hondureña puede tener un sistema contable y de ventas profesional sin 
 |---|---|---|
 | 1 | Base: login con roles, menú, panel de inicio | Hecha |
 | 2 | Categorías, clientes, proveedores e inventario con variantes, kits e imagen | Hecha |
-| 3 | Punto de venta, facturación (CAI o interna), PDF, cotizaciones e historial de facturas | Hecha |
+| 3 | Punto de venta, facturación (CAI o interna), PDF, cotizaciones e historial de facturas. En la semana 6: método de pago con su partida (Caja o Bancos), anulación de facturas y «Ver asiento contable» | Hecha |
 | 4 | Finanzas: partida doble, cuentas por cobrar y por pagar, ingresos, gastos, compras, libro diario y reportes en PDF | Hecha |
 | 5 | Inventario visual y alertas de stock | Absorbida por la Fase 2 (la lista de reposición pasa a la Fase 8) |
 | 6 | Estadísticas de ventas: indicadores, seis gráficos, insights automáticos, ranking de vendedores y reporte en PDF. Incluye el panel de inicio rediseñado y el menú de perfil | Hecha (se construyó después de la 7 para poder medir por vendedor y por rol) |
 | 6.5 | Preparación para producción: una instancia por cliente, catálogo del negocio configurable, asistente de configuración inicial, paletas de colores validadas y contraseñas con retroalimentación en vivo | Hecha |
 | 7 | Configuración, usuarios y roles con permisos granulares, contraseñas con bcrypt, bloqueo por intentos y auditoría | Hecha (se construyó antes que la 6, falta CSRF) |
-| 8 | Avisos automáticos por WhatsApp o correo, asistente virtual con IA y método de pago en el punto de venta | Pendiente (ideas por validar) |
+| 8 | Avisos automáticos por WhatsApp o correo y asistente virtual con IA | Pendiente (ideas por validar). El método de pago, que estaba aquí, se adelantó a la semana 6 |
 
 El detalle de cada pantalla, endpoint y regla de negocio está en [docs/referencia-tecnica.md](docs/referencia-tecnica.md).
 
@@ -140,11 +141,16 @@ andeliza-erp/
 │   ├── vision.md              Visión, Lean Canvas, hipótesis y alcance
 │   ├── mapa-historias.md      Mapa de historias y cortes
 │   ├── plan.md                Plan de 10 semanas y metodología
+│   ├── arquitectura.md        Contexto, contenedores, capas y carpetas
+│   ├── decisiones/            Decisiones de arquitectura (ADR)
 │   ├── modelo-datos.md        ERD y diccionario de datos
+│   ├── permisos.md            Roles, permisos y qué pide cada ruta
 │   ├── referencia-tecnica.md  Pantallas, endpoints y reglas de negocio
+│   ├── pruebas-usuarios.md    Pruebas con usuarias reales
+│   ├── evidencias/            Capturas y documentos de respaldo
 │   └── bitacora/              Una bitácora por semana
 ├── db/
-│   ├── migrations/            01 a 08: de la Fase 1 a la Fase 6.5 (la 05 es la Fase 7)
+│   ├── migrations/            01 a 09: de la Fase 1 a la semana 6 (la 05 es la Fase 7)
 │   ├── functions.sql          Funciones y triggers (se puede repetir)
 │   ├── seed.sql               Datos de prueba (desarrollo)
 │   ├── seed-produccion.sql    Datos mínimos de una instancia nueva (producción)
@@ -167,8 +173,11 @@ Pantallas principales: `/` (panel de inicio), `/pos`, `/facturas`, `/inventario`
 - [Visión del proyecto](docs/vision.md)
 - [Mapa de historias](docs/mapa-historias.md)
 - [Plan de trabajo y metodología](docs/plan.md)
+- [Arquitectura](docs/arquitectura.md) y [decisiones de arquitectura (ADR)](docs/decisiones/)
 - [Modelo de datos](docs/modelo-datos.md)
 - [Permisos y roles](docs/permisos.md)
+- [Referencia técnica](docs/referencia-tecnica.md)
+- [Pruebas con usuarios](docs/pruebas-usuarios.md)
 - [Historias para GitHub Issues](github-issues/issues_mvp.md)
 - [Bitácoras semanales](docs/bitacora/)
 
@@ -183,6 +192,7 @@ Andeliza ERP está en desarrollo y hay decisiones tomadas a propósito para avan
 - **Una instancia por cliente.** No hay tenencia compartida: cada negocio tiene su propia base y su propio despliegue, con el mismo código (decisión D-07).
 - **Contraseña temporal del seed de producción.** El repositorio solo trae un marcador; la contraseña se pone en una copia local al instalar y el sistema obliga a cambiarla. Hay que hacerlo antes de dar a conocer la dirección de la instancia.
 - **Facturación fiscal.** El sistema controla la numeración, el rango y la fecha límite del CAI e imprime los datos requeridos, pero no está certificado ni envía facturas al SAR. El formato debe validarse con un contador.
+- **Anulación de facturas.** Es total (no hay devoluciones parciales) y no emite una nota de crédito: el número de una factura con CAI anulada queda usado y, si ya se entregó al cliente, el contador decide cómo regularizarla.
 - **Sin pruebas automatizadas dentro del repositorio.** Las baterías de prueba se corrieron durante el desarrollo y todavía no forman parte del repo.
 - **Pendientes de producto.** Métodos de pago, devoluciones y notas de crédito, y crédito fiscal sobre las compras.
 

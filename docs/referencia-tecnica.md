@@ -56,8 +56,11 @@ models/dashboard.js     Panel de inicio: ventas del día, cobranza, stock, factu
 public/js/iconos.js     Íconos de línea compartidos por el servidor (EJS) y el navegador (Alpine)
 public/js/estadisticas.js, dashboard.js   Filtros y gráficos de Chart.js
 views/                 EJS: layouts, partials y una carpeta por módulo
-db/                    migrations/ (01 a 08), functions.sql, seed.sql (desarrollo), seed-produccion.sql (un cliente) y README.md
+db/                    migrations/ (01 a 09), functions.sql, seed.sql (desarrollo), seed-produccion.sql (un cliente) y README.md
+docs/arquitectura.md   Contexto, contenedores, capas y carpetas (Semana 6); docs/decisiones/ guarda los ADR
 ```
+
+**Semana 6.** No hay archivos de código nuevos: el método de pago, la anulación y el diseño del acceso viven en los módulos que ya existían (ver `docs/arquitectura.md`). En la base se agrega `db/migrations/09_migracion_semana6.sql`.
 
 **Archivos nuevos de la Fase 6.5.** `middlewares/negocio.js` (carga el negocio en cada petición), `utils/catalogo.js` (catálogo maestro y elecciones), `utils/colores.js` (contraste y paletas), `utils/imagen.js` (tamaño de PNG y JPEG), `routes/onboarding.js`, `controllers/onboarding.js`, `views/layouts/onboarding.ejs`, `views/onboarding/index.ejs`, `views/partials/clave.ejs` (campo de contraseña), `views/configuracion/_catalogo.ejs`, `public/js/onboarding.js`, `public/js/contrasena.js`, `public/js/config-catalogo.js`, `db/migrations/07_migracion_fase6.5.sql`, `db/migrations/08_migracion_fase6.5_categorias.sql`, `db/migrations/08_migracion_fase6.5_categorias.sql` y `db/seed-produccion.sql`.
 
@@ -95,16 +98,33 @@ a unos 4.5 MB y el servidor rechaza imágenes de más de 4 MB.
   «Nuevo» abre un alta rápida sin perder la venta. El RTN es opcional.
 - **Cobrar**: el servidor recalcula precios y totales con lo que hay en la base (lo que mande el navegador se ignora) y llama a
   `crear_venta`. La venta queda **pagada** salvo que se active «Dejar pendiente de pago».
+- **¿Cómo paga?** (Semana 6, issue #17): Efectivo, Tarjeta o Transferencia, los que el negocio tenga activos en Configuración
+  (catálogo maestro `metodosPago`; Cheque existe pero viene apagado). El efectivo entra a **Caja**; tarjeta, transferencia y
+  cheque, a **Bancos**. Una venta pendiente no lleva método (va a Cuentas por cobrar). Si llega un cobro sin método (una
+  pantalla abierta con la versión anterior), se toma el primero activo, que es Efectivo.
+- **Pista** (issue #16): con el carrito vacío, encima de los productos se lee «Toca un producto para agregarlo a la venta»,
+  visible también en celular y tablet, donde el carrito no está a la vista.
 - **Cobros que no se duplican**: cada cobro lleva una clave. Si el mismo cobro se reintenta (doble toque, red lenta) se devuelve
   la misma venta y el stock y el número de factura se usan una sola vez.
 - **Carrito guardado**: sobrevive a recargar la página (12 horas, por usuario). Al recuperarlo se ajusta a precios y stock actuales.
-- **Éxito**: indica si es factura fiscal (con CAI) o comprobante interno, con botones Imprimir PDF, Descargar y Nueva venta.
+- **Éxito**: indica si es factura fiscal (con CAI) o comprobante interno y con qué pagó, con botones Imprimir PDF, Descargar y Nueva venta.
 
 ## Facturas (`/facturas`, solo administrador)
 
-Historial con filtros en vivo: rango de fechas (en la hora del negocio), fiscal/interna, pagada/pendiente y búsqueda por cliente o
-número. Carga de 50 en 50. Cada factura se puede ver o descargar en PDF; las pendientes se pueden **marcar como pagadas**
-(no se puede deshacer desde la pantalla).
+Historial con filtros en vivo: rango de fechas (en la hora del negocio), fiscal/interna, pagada/pendiente/anulada y búsqueda
+por cliente o número. Carga de 50 en 50. Cada factura se puede ver o descargar en PDF y muestra con qué se pagó.
+
+- **Marcar como pagada** (`facturas.editar`): pregunta «¿Cómo pagó?». El saldo entra a Caja (efectivo) o a Bancos (tarjeta,
+  transferencia, cheque) con un abono, y el método queda guardado en la venta. No se deshace desde aquí.
+- **Ver asiento contable** (issue #19): si la venta tiene partida y la persona tiene `finanzas.ver`, lleva a
+  `/finanzas/partidas?venta=ID`, el libro diario filtrado con los asientos de esa factura (la venta, sus cobros y, si se
+  anuló, la contrapartida) y un aviso con «Ver todos los asientos» para quitar el filtro.
+- **Anular** (`facturas.anular`, administrador y supervisor): pide un motivo (5 a 300 caracteres) y explica lo que va a pasar.
+  La función `anular_venta` no borra nada: marca la venta, devuelve el stock (producto, variante o cada componente del kit),
+  registra la contrapartida exacta de su partida y deja la constancia en la auditoría. Una factura con abonos vigentes no se
+  anula: primero se anulan los abonos en Finanzas → Cuentas por cobrar. Una anulada no suma en los totales del historial, ni en
+  cuentas por cobrar, el panel o las estadísticas; sigue en el historial con la insignia «Anulada» y su total tachado.
+  Ver `docs/decisiones/003-anulacion-por-contrapartida.md`.
 
 ## PDF
 
@@ -114,6 +134,10 @@ número. Carga de 50 en 50. Cada factura se puede ver o descargar en PDF; las pe
   de factura, así que reimprimir una factura vieja conserva su CAI aunque después se cambie la configuración fiscal.
 - **Interno**: lleva la franja y el pie «COMPROBANTE INTERNO - No válido para crédito fiscal» y una marca de agua «NO FISCAL».
 - **Cotización**: no es documento fiscal, no consume stock ni números; vale 15 días (configurable).
+- **Forma de pago**: las ventas desde la Semana 6 muestran «FORMA DE PAGO» (Efectivo, Tarjeta…). Las anteriores no tienen el
+  dato guardado y la línea no aparece.
+- **Anulada**: franja roja «DOCUMENTO ANULADO el … por … Motivo: …», estado «Anulada», sello y marca de agua «ANULADA». En un
+  comprobante interno la marca «NO FISCAL» se mantiene, más abajo.
 - El logo sale de `configuracion_negocio.logo_url` o, si está vacío, de `client.config.js`. Solo se admiten PNG y JPEG; si el
   logo falla, el PDF se genera igual sin logo.
 - En Vercel, `vercel.json` incluye `node_modules/pdfkit/**` (pdfkit carga sus fuentes de una forma que el empaquetado no detecta).
@@ -126,11 +150,12 @@ número. Carga de 50 en 50. Cada factura se puede ver o descargar en PDF; las pe
 | `GET /pos` | `pos.ver` | Pantalla del POS (catálogo, clientes, tasa y modo de facturación) |
 | `GET /pos/catalogo` | `pos.ver` | Catálogo con el stock actual (JSON) |
 | `POST /pos/clientes` | `clientes.crear` | Alta rápida de cliente |
-| `POST /pos/cobrar` | `pos.crear` | Cobra. Cuerpo: `cliente_id`, `items` (`producto_id`, `variante_id`, `cantidad`), `pendiente`, `clave` |
+| `POST /pos/cobrar` | `pos.crear` | Cobra. Cuerpo: `cliente_id`, `items` (`producto_id`, `variante_id`, `cantidad`), `pendiente`, `clave`, `metodo_pago` (Semana 6; opcional) |
 | `POST /pos/cotizacion` | `pos.crear` | PDF de cotización (campo de formulario `datos` con el carrito en JSON) |
 | `GET /facturas` | admin | Pantalla del historial |
-| `GET /facturas/datos` | admin | Historial en JSON: `desde`, `hasta`, `tipo`, `estado`, `q`, `offset` |
-| `PATCH /facturas/:id/pagada` | admin | Marca una factura como pagada |
+| `GET /facturas/datos` | admin | Historial en JSON: `desde`, `hasta`, `tipo`, `estado` (`P`, `C` o `A` = anuladas), `q`, `offset` |
+| `PATCH /facturas/:id/pagada` | `facturas.editar` | Marca una factura como pagada. Cuerpo: `metodo_pago` (sin él, efectivo). 409 si está anulada |
+| `POST /facturas/:id/anular` | `facturas.anular` | Anula la factura. Cuerpo: `motivo`. Responde `contabilidad`: `revertida`, `sin_partida` (venta de antes del inicio contable) o `sin_contabilidad` |
 | `GET /facturas/:id/pdf[?descargar=1]` | `facturas.ver` (todas); sin él, solo las propias | PDF de la venta |
 | `GET /salud[?pdf=1]` | público | Comprueba la base de datos (y la generación de PDF) |
 
@@ -304,14 +329,15 @@ El sistema ubica cada cuenta por su `clave` (no por el código), así que se pue
 ### Qué partida genera cada operación
 | Operación | Debe | Haber |
 |---|---|---|
-| Venta pagada en el POS | Caja (total) · Costo de ventas | Ventas (subtotal) · Impuesto por pagar · Inventario |
+| Venta pagada en el POS en efectivo | Caja (total) · Costo de ventas | Ventas (subtotal) · Impuesto por pagar · Inventario |
+| Venta pagada con tarjeta, transferencia o cheque | Bancos (total) · Costo de ventas | Ventas (subtotal) · Impuesto por pagar · Inventario |
 | Venta pendiente en el POS | Cuentas por cobrar (total) · Costo de ventas | Ventas · Impuesto por pagar · Inventario |
-| Abono de un cliente | Caja o Bancos | Cuentas por cobrar |
+| Abono de un cliente (o «Marcar pagada» en Facturas) | Caja o Bancos, según el método | Cuentas por cobrar |
 | Ingreso cobrado / por cobrar | Caja o Bancos / Cuentas por cobrar | Cuenta del ingreso |
 | Gasto pagado / por pagar | Cuenta del gasto | Caja o Bancos / Cuentas por pagar |
 | Compra pagada / por pagar | Inventario | Caja o Bancos / Cuentas por pagar |
 | Pago a proveedor | Cuentas por pagar | Caja o Bancos |
-| Anulación de cualquiera | (invierte la partida original) | |
+| Anulación de cualquiera (también de una factura) | (invierte la partida original) | |
 
 ### Cuentas por cobrar y por pagar
 - **Por cobrar**: ventas del POS dejadas como «Pendiente de pago» e ingresos «Por cobrar». **Por pagar**: compras y gastos «Por pagar».
@@ -448,8 +474,10 @@ Para comparar con el usuario, el componente lee el del formulario (en *Recuperar
 **Reglas** (decisión D-11, en `utils/colores.js`, con las fórmulas de WCAG 2.1 y la distancia CIE76):
 
 - Texto blanco sobre el color primario: contraste de al menos **4.5:1** (AA para texto normal).
-- Acento sobre el primario: al menos **3:1**, porque el acento se usa encima del primario (marca del menú activo, franja de la pantalla de acceso).
+- Acento sobre el primario: al menos **3:1**, porque el acento se usa encima del primario (marca del menú activo y, en la pantalla de acceso, la sombra del rótulo del logo y la franja de abajo).
 - Distancia entre los dos: ΔE de al menos **25**; por debajo se verían como el mismo color.
+
+**Pantalla de acceso (Semana 6).** No tiene colores fijos: el campo de marca es un degradado del primario (más oscuro hacia abajo, con un brillo del mismo primario aclarado), el logo va en un rótulo blanco con una sombra sólida del acento y el botón «Entrar» es el primario. Si el logo no carga, el rótulo muestra la inicial del negocio. Se revisó con seis paletas (cinco del catálogo y una propia) en escritorio, tableta y celular.
 
 **Las diez paletas del catálogo**, medidas por el mismo código que usa el sistema:
 
@@ -489,6 +517,9 @@ Para comparar con el usuario, el componente lee el del formulario (en *Recuperar
   `crear_venta` exige `variante_id`. Los componentes de un kit no pueden tener variantes, y un producto
   no puede ser variantes y kit a la vez. Al quitar una variante en el formulario se desactiva (no se borra,
   porque puede tener ventas); si se vuelve a agregar con el mismo nombre se reactiva.
+- **Kits en pantalla** (Semana 6, issue #18): un kit no tiene stock propio. El inventario muestra «Puedes armar N» (lo que
+  alcanza el componente más escaso) y cuál lo limita; el formulario lo dice arriba, enlaza a la sección Kit, explica los
+  tres pasos y agrega la columna «Alcanza para» por componente. Al vender, `detalle_venta.componentes` guarda lo consumido.
 - **Unidades y opciones de variante**: salen de `client.config.js` (`unidades`, `tiposVariante`, `tallas`, `equipos`).
   Un producto que ya tiene una unidad que no está en la lista (ej. `kilo`) la conserva al editarlo.
 - **Búsqueda en vivo**: los listados cargan los datos una vez y filtran en el navegador (sin acentos ni
@@ -499,8 +530,13 @@ Para comparar con el usuario, el componente lee el del formulario (en *Recuperar
 
 ## Límites conocidos de la contabilidad
 
-- El POS manda siempre el dinero a Caja: todavía no registra el método de pago (efectivo, tarjeta, transferencia).
-- No hay devoluciones ni ventas anuladas, ni crédito fiscal sobre las compras (las compras entran por su costo total).
+- La tarjeta entra a Bancos por el total: no se registra la comisión del procesador ni el tiempo en que el banco acredita el
+  dinero (no hay una cuenta puente). Si el contador lo pide, sería una cuenta nueva y un ajuste en `cuenta_metodo_pago`.
+- Una factura se anula completa: no hay devoluciones parciales ni notas de crédito. Anular una factura fiscal (con CAI) deja
+  su número usado; si ya se entregó al cliente, el contador decide si corresponde una nota de crédito ante el SAR.
+- Las ventas hechas antes de iniciar la contabilidad no tienen partida: al anularlas vuelve el stock, pero no hay asiento que
+  revertir (la respuesta lo dice con `sin_partida`).
+- No hay crédito fiscal sobre las compras (las compras entran por su costo total).
 - No hay cierre de períodos: las partidas anteriores a hoy se pueden registrar mientras no sean anteriores al inicio de la contabilidad.
 
 ## Pendiente antes de producción real

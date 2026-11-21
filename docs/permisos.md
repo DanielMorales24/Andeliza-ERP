@@ -33,7 +33,8 @@ Este documento describe quién puede hacer qué en Andeliza ERP. **La matriz de 
 | Proveedores | Eliminar (`proveedores.eliminar`) | Desactivar y reactivar proveedores | ✔ | ✔ | — | — |
 | Facturas | Ver (`facturas.ver`) | Ver y descargar TODAS las facturas | ✔ | ✔ | — | ✔ |
 | Facturas | Solo propias (`facturas.ver_propias`) | Ver y descargar solo las facturas que el usuario emitió | ✔ | — | ✔ | — |
-| Facturas | Editar (`facturas.editar`) | Marcar facturas como pagadas | ✔ | ✔ | — | — |
+| Facturas | Editar (`facturas.editar`) | Marcar facturas como pagadas (eligiendo cómo pagó) | ✔ | ✔ | — | — |
+| Facturas | Anular (`facturas.anular`) | Anular una factura: devuelve el stock y revierte su asiento, sin borrar nada (Semana 6) | ✔ | ✔ | — | — |
 | Finanzas y reportes | Ver (`finanzas.ver`) | Ver finanzas, cartera, libro diario y reportes | ✔ | ✔ | — | ✔ |
 | Finanzas y reportes | Crear (`finanzas.crear`) | Registrar ingresos, gastos, compras, abonos, pagos y asientos | ✔ | ✔ | — | ✔ |
 | Finanzas y reportes | Editar (`finanzas.editar`) | Conciliar el inventario con las existencias | ✔ | ✔ | — | ✔ |
@@ -43,7 +44,7 @@ Este documento describe quién puede hacer qué en Andeliza ERP. **La matriz de 
 | Configuración | Crear (`configuracion.crear`) | Crear usuarios y roles | ✔ | — | — | — |
 | Configuración | Editar (`configuracion.editar`) | Editar el negocio, los usuarios, los roles y sus permisos | ✔ | — | — | — |
 | Configuración | Eliminar (`configuracion.eliminar`) | Eliminar roles | ✔ | — | — | — |
-| | | **Total de permisos** | **27** | **22** | **6** | **5** |
+| | | **Total de permisos** | **28** | **23** | **6** | **5** |
 
 ### Resumen por módulo
 
@@ -85,8 +86,9 @@ Interpretación de cada rol:
 | `/clientes` y `/proveedores`: listar, crear, editar, activar/desactivar | `ver`, `crear`, `editar`, `eliminar` del módulo |
 | `GET /facturas`, `GET /facturas/datos` | `facturas.ver` (todas) o `facturas.ver_propias` (solo las del usuario) |
 | `GET /facturas/:id/pdf` | `facturas.ver`, `facturas.ver_propias` o `pos.crear` (sin `facturas.ver`, solo la propia, y una ajena responde 404) |
-| `PATCH /facturas/:id/pagada` | `facturas.editar` |
-| `GET /finanzas/*` (resumen, cartera, movimientos, libro diario, reportes PDF) | `finanzas.ver` |
+| `PATCH /facturas/:id/pagada` | `facturas.editar` (el cuerpo lleva `metodo_pago`; sin él, efectivo) |
+| `POST /facturas/:id/anular` | `facturas.anular` (la función `anular_venta` deja su propio registro en la auditoría) |
+| `GET /finanzas/*` (resumen, cartera, movimientos, libro diario, reportes PDF) | `finanzas.ver`. El enlace "Ver asiento contable" de Facturas (`/finanzas/partidas?venta=ID`) solo se muestra a quien lo tiene |
 | `POST` de iniciar, saldo inicial, ingresos, gastos, compras, abonos, pagos, asientos manuales | `finanzas.crear` |
 | `POST /finanzas/conciliar-inventario` | `finanzas.editar` |
 | `POST` de anular ingresos, gastos, abonos, pagos y asientos | `finanzas.eliminar` |

@@ -7,6 +7,8 @@ Modelo relacional de Andeliza ERP en PostgreSQL (Supabase). Cubre las Fases 1 a 
 > **Fase 6.5 (migración 07).** Agrega 14 columnas a `configuracion_negocio` (formato regional, paleta, elecciones del catálogo maestro y asistente inicial), 1 a `usuarios` (`onboarding_pendiente`), 4 restricciones `CHECK` y la función `completar_onboarding`. No crea tablas: la base sigue teniendo 26 tablas y 2 vistas.
 >
 > **Migración 08.** Agrega tres filas al plan de cuentas (6106 `gasto_servicios`, 6107 `gasto_impuestos` y 4206 `ingreso_comisiones`) y vuelve a crear `registrar_gasto` y `registrar_ingreso` para que validen la categoría contra el plan de cuentas en lugar de una lista fija. No cambia el esquema.
+>
+> **Semana 6 (migración 09).** Agrega 5 columnas a `ventas` (`metodo_pago` y la constancia de anulación: `anulada`, `anulada_en`, `anulada_por`, `motivo_anulacion`), 1 a `detalle_venta` (`componentes`, lo que consumió un kit) y 1 a `configuracion_negocio` (`metodos_pago_activos`); 4 restricciones `CHECK`, 1 clave foránea (`anulada_por`), 1 índice parcial y el permiso `facturas.anular`. Funciones nuevas: `cuenta_metodo_pago` y `anular_venta`; cambian `crear_venta`, `contabilizar_venta`, `registrar_abono_cliente`, `generar_apertura_contable`, `estadisticas_lineas` y la vista `v_cxc`. Contado sobre una base instalada con 01 a 09: **26 tablas**, **2 vistas**, **259 columnas** y **38 claves foráneas**.
 
 ## Decisiones de modelado
 
@@ -109,6 +111,9 @@ erDiagram
         varchar estado
         varchar numero_factura UK
         varchar tipo_documento
+        varchar metodo_pago
+        boolean anulada
+        bigint anulada_por FK
     }
     detalle_venta {
         bigint id PK
@@ -204,6 +209,7 @@ erDiagram
     productos ||--o{ componentes_producto : "producto_padre_id"
     clientes |o--o{ ventas : "cliente_id"
     usuarios |o--o{ ventas : "usuario_id"
+    usuarios |o--o{ ventas : "anulada_por"
     productos ||--o{ detalle_venta : "producto_id"
     variantes_producto |o--o{ detalle_venta : "variante_id"
     ventas ||--o{ detalle_venta : "venta_id"
@@ -265,7 +271,7 @@ Lectura: `||` indica "exactamente uno", `|o` "cero o uno" (la clave foránea adm
 | `componentes_producto` | `id` | `producto_hijo_id` → `productos` (RESTRICT)<br>`producto_padre_id` → `productos` (CASCADE) | UNIQUE `producto_padre_id,producto_hijo_id`<br>CHECK `(cantidad > 0)`<br>CHECK `(producto_padre_id <> producto_hijo_id)` | Composición de un kit: qué productos lo forman y en qué cantidad. |
 | `clientes` | `id` | — | — | Personas o empresas a las que se vende. El RTN es opcional. |
 | `proveedores` | `id` | — | — | Personas o empresas a las que se compra. |
-| `ventas` | `id` | `cliente_id` → `clientes` (SET NULL)<br>`usuario_id` → `usuarios` (NO ACTION) | UNIQUE `numero_factura`<br>UNIQUE `clave_cliente (solo donde clave_cliente IS NOT NULL)`<br>CHECK `(estado IN ('P', 'C'))`<br>CHECK `(tipo_documento IN ('fiscal', 'interno'))` | Encabezado de cada venta: factura fiscal o comprobante interno, estado de pago y vencimiento. |
+| `ventas` | `id` | `cliente_id` → `clientes` (SET NULL)<br>`usuario_id` → `usuarios` (NO ACTION) | UNIQUE `numero_factura`<br>UNIQUE `clave_cliente (solo donde clave_cliente IS NOT NULL)`<br>CHECK `(estado IN ('P', 'C'))`<br>CHECK `(tipo_documento IN ('fiscal', 'interno'))`<br>CHECK `chk_ventas_metodo_pago`, `chk_ventas_anulacion` (09) | Encabezado de cada venta: factura fiscal o comprobante interno, estado de pago, vencimiento, método de pago y anulación. |
 | `detalle_venta` | `id` | `producto_id` → `productos` (RESTRICT)<br>`variante_id` → `variantes_producto` (SET NULL)<br>`venta_id` → `ventas` (CASCADE) | CHECK `(cantidad > 0)` | Líneas de cada venta con el precio y el costo vigentes al vender. |
 | `compras` | `id` | `cuenta_id` → `plan_cuentas` (NO ACTION)<br>`partida_id` → `partidas` (NO ACTION)<br>`proveedor_id` → `proveedores` (NO ACTION) | CHECK `(estado_pago IN ('P', 'C'))` | Compras de inventario a proveedores, con su condición de pago. |
 | `detalle_compra` | `id` | `compra_id` → `compras` (CASCADE)<br>`producto_id` → `productos` (RESTRICT)<br>`variante_id` → `variantes_producto` (SET NULL) | CHECK `(cantidad > 0)` | Líneas de cada compra. |
@@ -398,6 +404,7 @@ Datos del negocio, contadores internos y, desde la Fase 6.5, su formato regional
 | `onboarding_completado` | `boolean` | No | `false` | — | TRUE cuando el negocio terminó el asistente de configuración inicial. |
 | `onboarding_paso` | `smallint` | No | `1` | CHECK 1 a 6 | Paso más avanzado al que se llegó en el asistente (para retomarlo). |
 | `onboarding_completado_en` | `timestamptz` | Sí | — | — | Cuándo se completó el asistente. |
+| `metodos_pago_activos` | `jsonb` | Sí | — | CHECK arreglo | Métodos que ofrece el punto de venta (migración 09), por ejemplo `["efectivo","tarjeta"]`. NULL = los predeterminados del catálogo maestro (efectivo, tarjeta y transferencia). |
 
 Restricciones de la tabla: CHECK `(id = 1)`. Desde la migración 07 también `chk_negocio_colores` (los dos colores con forma `#RRGGBB`), `chk_negocio_regional` (tasa entre 0 y 1, moneda y formato no vacíos), `chk_negocio_catalogo` (cada elección es NULL o un arreglo; las opciones de variante, un objeto) y `chk_negocio_onboarding` (paso entre 1 y 6).
 
@@ -552,7 +559,7 @@ Personas o empresas a las que se compra.
 
 ### `ventas`
 
-Encabezado de cada venta: factura fiscal o comprobante interno, estado de pago y vencimiento.
+Encabezado de cada venta: factura fiscal o comprobante interno, estado de pago, vencimiento, cómo se pagó y, si se anuló, la constancia de la anulación (Semana 6, migración 09).
 
 | Columna | Tipo | Nulo | Por defecto | Restricciones | Descripción |
 |---|---|---|---|---|---|
@@ -568,8 +575,15 @@ Encabezado de cada venta: factura fiscal o comprobante interno, estado de pago y
 | `tipo_documento` | `varchar(10)` | No | `'fiscal'` | — | fiscal (con CAI) o interno. |
 | `clave_cliente` | `varchar(64)` | Sí | — | — | Clave que genera el navegador: si un cobro se reintenta, no se duplica la venta. |
 | `fecha_vencimiento` | `date` | Sí | — | — | Vencimiento cuando la venta quedó a crédito. |
+| `metodo_pago` | `varchar(20)` | Sí | — | CHECK | Cómo se pagó: `efectivo` (la partida carga Caja), `tarjeta`, `transferencia` o `cheque` (cargan Bancos). NULL en una venta al crédito todavía sin cobrar y en las ventas anteriores a la Semana 6 (no se inventa el dato). Al cobrar una venta al crédito desde Facturas se guarda el método con que se cobró. |
+| `anulada` | `boolean` | No | `false` | CHECK | TRUE si la factura se anuló. Una anulada no se borra: sigue en el historial y su número no se reutiliza. |
+| `anulada_en` | `timestamptz` | Sí | — | CHECK | Cuándo se anuló. |
+| `anulada_por` | `bigint` | Sí | — | FK → usuarios(id) | Quién la anuló. |
+| `motivo_anulacion` | `varchar(300)` | Sí | — | CHECK | Por qué se anuló (obligatorio, al menos 5 caracteres). |
 
-Restricciones de la tabla: UNIQUE `clave_cliente (solo donde clave_cliente IS NOT NULL)`. CHECK `(estado IN ('P', 'C'))`. CHECK `(tipo_documento IN ('fiscal', 'interno'))`.
+Restricciones de la tabla: UNIQUE `clave_cliente (solo donde clave_cliente IS NOT NULL)`. CHECK `(estado IN ('P', 'C'))`. CHECK `(tipo_documento IN ('fiscal', 'interno'))`. Desde la migración 09, `chk_ventas_metodo_pago` (NULL o uno de los cuatro métodos) y `chk_ventas_anulacion` (una anulada tiene fecha y motivo; una vigente no tiene ninguno de los tres datos). Índice parcial `idx_ventas_anuladas (anulada_en) WHERE anulada`.
+
+El **estado** (`P`/`C`) sigue siendo solo el estado de pago: una factura anulada conserva el que tenía al anularse y la columna `anulada` dice que ya no cuenta. Se eligió así, y no un tercer estado `A`, por la misma razón que `ingresos.anulado` y `gastos.anulado`: ver `docs/decisiones/003-anulacion-por-contrapartida.md`.
 
 ### `detalle_venta`
 
@@ -585,8 +599,9 @@ Líneas de cada venta con el precio y el costo vigentes al vender.
 | `precio_unitario` | `numeric(18,2)` | No | — | — | Precio de venta al momento de vender. |
 | `costo_unitario` | `numeric(18,2)` | No | `0` | — | Costo al momento de vender: base del costo de ventas (en un kit, la suma de sus componentes). |
 | `subtotal` | `numeric(18,2)` | No | — | — | Cantidad por precio, con 2 decimales. |
+| `componentes` | `jsonb` | Sí | — | CHECK arreglo | Solo en kits (migración 09): lo que la venta descontó de cada componente, `[{"producto_id": 3, "cantidad": 2}]`. La anulación devuelve exactamente eso aunque la receta del kit cambie después. NULL en ventas de kits anteriores a la Semana 6 (se devuelven con la receta actual y la auditoría lo marca). |
 
-Restricciones de la tabla: CHECK `(cantidad > 0)`.
+Restricciones de la tabla: CHECK `(cantidad > 0)`. Desde la migración 09, `chk_detalle_componentes` (NULL o un arreglo).
 
 ### `compras`
 
@@ -772,7 +787,7 @@ Triggers: `trg_partida_balanceada`, `trg_partida_lineas_inmutables`.
 
 | Vista | Qué muestra |
 |---|---|
-| `v_cxc` | Cuentas por cobrar: ventas pendientes e ingresos por cobrar, con saldo (monto menos abonos activos), vencimiento, plazo estimado y días vencidos. |
+| `v_cxc` | Cuentas por cobrar: ventas pendientes (no anuladas, desde la migración 09) e ingresos por cobrar, con saldo (monto menos abonos activos), vencimiento, plazo estimado y días vencidos. |
 | `v_cxp` | Cuentas por pagar: compras y gastos pendientes, con la misma información. |
 
 ## Funciones y triggers
@@ -789,6 +804,7 @@ Las reglas críticas viven en la base de datos para que cada operación sea ató
 | `anular_pago_proveedor` | Anula un pago y reabre la deuda. |
 | `anular_partida` | Crea la contrapartida (Debe y Haber invertidos) de una partida. |
 | `anular_partida_manual` | Anula solo asientos manuales y ajustes. |
+| `anular_venta` | Anula una factura sin borrar nada (Semana 6): exige motivo, rechaza una ya anulada o con abonos vigentes, devuelve el stock (productos, variantes y componentes de kits), crea la contrapartida exacta de su partida con `anular_partida` y deja la constancia en la auditoría. |
 | `autenticar_usuario` | Inicio de sesión: verifica la contraseña, bloquea tras 5 fallos (15 minutos) y devuelve el motivo si no entra. |
 | `bloquear_cambios_auditoria` | Trigger: la auditoría no se modifica ni se borra. |
 | `bloquear_cambios_partidas` | Trigger: impide modificar o borrar partidas y sus líneas. |
@@ -797,17 +813,18 @@ Las reglas críticas viven en la base de datos para que cada operación sea ató
 | `completar_auditoria` | Trigger: completa el nombre de quien actuó y una descripción. |
 | `completar_onboarding` | Cierra el asistente de configuración inicial (Fase 6.5): exige RTN, dirección, teléfono, correo, un logo propio y la paleta elegida; marca el negocio como configurado, apaga la marca de los usuarios y lo registra en la auditoría. |
 | `conciliar_inventario` | Iguala el inventario del libro con las existencias. |
-| `contabilizar_venta` | Genera la partida de una venta (la llama crear_venta). |
+| `contabilizar_venta` | Genera la partida de una venta (la llama crear_venta). Debe: Caja o Bancos según el método de pago, o Cuentas por cobrar si quedó al crédito. |
 | `crear_partida` | Único camino para escribir en el libro diario: valida y numera la partida. |
 | `crear_rol` | Crea un rol, opcionalmente copiando los permisos de otro. |
 | `crear_usuario` | Crea un usuario con contraseña provisional y rol, validando la política. |
-| `crear_venta` | Registra una venta completa en una sola transacción: valida stock (variantes y kits), descuenta, numera y contabiliza. |
+| `crear_venta` | Registra una venta completa en una sola transacción: valida stock (variantes y kits), descuenta, numera y contabiliza. Desde la migración 09 recibe el método de pago como último parámetro (opcional: el código anterior la sigue llamando igual) y guarda lo que consumió cada kit. |
+| `cuenta_metodo_pago` | Cuenta a la que entra un método de pago: `efectivo` → `caja`; `tarjeta`, `transferencia` y `cheque` → `bancos`. Rechaza cualquier otro. |
 | `cuenta_efectivo` | Valida que la cuenta sea Caja o Bancos. |
 | `cuenta_por_clave` | Id de una cuenta contable a partir de su clave estable. |
 | `eliminar_rol` | Elimina un rol propio que no tenga usuarios. |
 | `estadisticas_dia_semana` | Ventas por día de la semana (1 lunes a 7 domingo) con el promedio por día. |
 | `estadisticas_kpis` | Indicadores del período: ventas, facturas, ticket, margen, productos distintos, fiscal e interno, crédito. |
-| `estadisticas_lineas` | Una fila por línea de venta del período con su neto, bruto (impuesto repartido), costo y si tiene costo. Es la base de las demás funciones de estadísticas. |
+| `estadisticas_lineas` | Una fila por línea de venta del período con su neto, bruto (impuesto repartido), costo y si tiene costo. Es la base de las demás funciones de estadísticas. Desde la migración 09 deja fuera las facturas anuladas. |
 | `estadisticas_mejor_dia` | El día con más ventas del período. |
 | `estadisticas_panel` | Todo lo de estadísticas y el período anterior de igual longitud, en una sola llamada. |
 | `estadisticas_serie` | Ventas por día, semana o mes (automático según el rango), con ceros en los períodos sin ventas. |
@@ -849,3 +866,4 @@ Las reglas críticas viven en la base de datos para que cada operación sea ató
 - Un abono o pago no puede superar el saldo pendiente. La función bloquea la fila para que dos cobros simultáneos no se pasen del saldo.
 - Solo existe una fila de `configuracion_negocio` (`id = 1`).
 - El número de factura es único y un cobro repetido con la misma `clave_cliente` no crea otra venta.
+- Una venta no se borra para corregirla: se anula con `anular_venta`, que deja la venta, su detalle y su partida original intactos y agrega la contrapartida. Una factura se anula una sola vez, y no se anula mientras tenga abonos vigentes.
