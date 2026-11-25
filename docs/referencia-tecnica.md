@@ -351,6 +351,14 @@ El sistema ubica cada cuenta por su `clave` (no por el código), así que se pue
 Ingresos varios, gastos y compras de inventario, cada uno con su condición (*Cobrado/Pagado* o *Por cobrar/Por pagar*).
 Una **compra** sube el stock (por variante si el producto las tiene) y recalcula el costo del producto con **promedio ponderado**.
 Se pueden anular ingresos y gastos que no tengan cobros o pagos; las compras no se anulan en esta fase (se corrige con un asiento manual).
+
+**Gastos (semana 7).** En la pestaña *Gastos*, debajo de la condición se lee el saldo de un gasto por pagar («Saldo L 900.00 de L 1,500.00») o de qué cuenta salió uno pagado («Salió de Caja general»). Cada gasto tiene:
+
+- **Pagar** (`finanzas.crear`, solo si tiene saldo): muestra total, pagado y saldo, propone el saldo como monto y registra el pago por `POST /finanzas/cxp/pagos` con `origen: 'gasto'`, igual que desde *Cuentas por pagar*. Se puede pagar una parte. Partida: Cuentas por pagar / Caja o Bancos.
+- **Ver asiento contable** (`finanzas.ver`): lleva a `/finanzas/partidas?gasto=ID`, el libro diario filtrado con el gasto, sus pagos y sus anulaciones.
+- **Anular** (`finanzas.eliminar`): admite un motivo opcional, que queda en la auditoría junto con la anulación. Si el gasto tiene pagos vigentes, la ventana explica que hay que anularlos primero en *Cuentas por pagar* y no ofrece confirmar; la base también lo rechaza.
+
+El botón *Nuevo* aparece solo con `finanzas.crear`. Las rutas exigen los mismos permisos en el servidor. Las pruebas del flujo completo están en `tests/integration/gastos.test.js`.
 El selector de categoría (gastos) y de tipo (ingresos) muestra solo lo que el negocio tiene activo, con su nombre del catálogo. Las categorías nuevas aparecen en el libro diario, la balanza y el estado de resultados como cualquier otra cuenta de gasto o de ingreso: los reportes agrupan por tipo de cuenta, no por una lista.
 
 ### Inventario del libro y existencias

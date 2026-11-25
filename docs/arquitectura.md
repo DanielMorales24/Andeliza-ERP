@@ -174,7 +174,9 @@ andeliza-erp/
 ├── views/                EJS: layouts, partials y una carpeta por módulo
 ├── public/               css/app.css, js/ (un componente de Alpine por pantalla), img/
 ├── db/                   migrations/ 01 a 09, functions.sql, seeds y su README
-├── docs/                 Visión, plan, arquitectura, ADR, modelo de datos, bitácoras
+├── docs/                 Visión, plan, arquitectura, ADR, modelo de datos, pruebas, bitácoras
+├── tests/                unit/, integration/, e2e/, fixtures/ (datos inventados) y soporte/ (guardas y base)
+├── .github/workflows/    ci.yml: las pruebas en cada push y Pull Request
 └── vercel.json           Empaqueta views/, public/, client.config.js y las fuentes de pdfkit
 ```
 
@@ -189,6 +191,8 @@ andeliza-erp/
 | `db/` | El esquema versionado: migraciones numeradas que solo se agregan, nunca se editan, y `functions.sql` con todas las funciones (`CREATE OR REPLACE`). Una base nueva se instala con la cadena completa; una en uso recibe solo las migraciones que le faltan. |
 | `api/` y `vercel.json` | Lo único propio de Vercel. Si el despliegue cambiara de plataforma, `app.js` sigue igual. |
 | `docs/` | Lo que un evaluador o un desarrollador nuevo necesita para entender el sistema sin leer el código. |
+| `tests/` | Una carpeta por nivel de prueba. Las de integración llaman a la app con Supertest (por eso `app.js` solo abre el puerto cuando se ejecuta directamente) y usan una base local que se arma desde `db/` igual que una instancia nueva. `soporte/guardas.js` impide que corran contra una base que no sea local y `_test` ([estrategia](pruebas.md)). |
+| `.github/workflows/` | El pipeline: las mismas pruebas en cada `push` y Pull Request, con un PostgreSQL 15 desechable y sin ningún secreto. |
 
 **Dónde se toca cada cosa en la semana 6.** El método de pago y la anulación no necesitaron archivos nuevos: entraron en los módulos que ya existían (`pos`, `facturas`, `ventas`, `documentos`, `finanzas`) y en la migración `db/migrations/09_migracion_semana6.sql`. Que un flujo nuevo quepa en la estructura sin forzarla es la señal de que la organización por módulos y capas funciona.
 
@@ -202,6 +206,7 @@ andeliza-erp/
 | Aislamiento entre clientes | Una base por cliente: un error de consulta no puede mostrar datos de otro negocio ([ADR 002](decisiones/002-una-instancia-por-cliente.md)). |
 | Despliegue sin interrupciones | Las migraciones aditivas se ejecutan antes del `git push` y el código anterior sigue funcionando con ellas; *Instant Rollback* de Vercel queda disponible. |
 | Mantenibilidad | Capas con responsabilidades claras, un archivo por módulo, nombres en español y documentación de cada decisión. |
+| Calidad comprobable | 85 pruebas automatizadas sobre los focos de riesgo (dinero, reglas, permisos y el flujo de venta), contra una base real de PostgreSQL armada con las mismas migraciones, y un pipeline que las corre en cada Pull Request ([pruebas](pruebas.md)). |
 
 ## 6. Límites conocidos de la arquitectura
 
