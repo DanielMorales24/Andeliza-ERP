@@ -25,6 +25,12 @@ async function pagina(req, res, next) {
       datos: {
         estado: est, inicioMes, listas: { ingresos, gastos, compras }, catalogos: cat,
         tiposIngreso: tiposIngreso(res), categoriasGasto: categoriasGasto(res), compras: config.funcionalidades.compras === true,
+        // Qué botones se muestran (las rutas los vuelven a exigir): registrar y pagar, anular, ver el asiento
+        permisos: {
+          crear: req.user.tiene('finanzas', 'crear'),
+          anular: req.user.tiene('finanzas', 'eliminar'),
+          verAsiento: req.user.tiene('finanzas', 'ver'),
+        },
       },
     });
   } catch (err) { next(err); }

@@ -9,7 +9,12 @@
   },
   "scripts": {
     "dev": "node --watch app.js",
-    "start": "node app.js"
+    "start": "node app.js",
+    "test": "jest",
+    "test:unit": "jest --selectProjects unit",
+    "test:integration": "jest --selectProjects integracion",
+    "test:e2e": "playwright test",
+    "test:db": "node tests/soporte/preparar-base.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
@@ -21,5 +26,10 @@
     "multer": "^2.5.0",
     "pdfkit": "^0.20.2",
     "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "jest": "30.5.2",
+    "supertest": "7.3.2"
   }
 }

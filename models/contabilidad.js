@@ -83,7 +83,7 @@ async function resumen() {
 }
 
 // ---------- Libro diario ----------
-async function libro({ desde, hasta, cuenta, origen, venta, q, orden = 'desc', offset = 0, limite = 50 }) {
+async function libro({ desde, hasta, cuenta, origen, venta, gasto, q, orden = 'desc', offset = 0, limite = 50 }) {
   const params = [];
   const cond = [];
   const param = (v) => { params.push(v); return '$' + params.length; };
@@ -97,6 +97,14 @@ async function libro({ desde, hasta, cuenta, origen, venta, q, orden = 'desc', o
     const propias = `SELECT x.id FROM partidas x
                       WHERE (x.origen_tipo = 'venta' AND x.origen_id = ${v})
                          OR (x.origen_tipo = 'abono_cliente' AND x.origen_id IN (SELECT a.id FROM abonos_clientes a WHERE a.venta_id = ${v}))`;
+    cond.push(`(p.id IN (${propias}) OR p.reversa_de IN (${propias}))`);
+  }
+  if (gasto) {
+    // Lo mismo para un gasto: su asiento, los de sus pagos y las contrapartidas de cualquiera de ellos
+    const g = param(gasto);
+    const propias = `SELECT x.id FROM partidas x
+                      WHERE (x.origen_tipo = 'gasto' AND x.origen_id = ${g})
+                         OR (x.origen_tipo = 'pago_proveedor' AND x.origen_id IN (SELECT pp.id FROM pagos_proveedores pp WHERE pp.gasto_id = ${g}))`;
     cond.push(`(p.id IN (${propias}) OR p.reversa_de IN (${propias}))`);
   }
   if (q) {

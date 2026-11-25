@@ -11,7 +11,7 @@
                 class="rounded px-4 py-2 text-sm font-medium" :class="tab === t.clave ? 'bg-primario text-white' : 'text-gray-600 hover:bg-fondo'" x-text="t.etiqueta"></button>
       </template>
     </div>
-    <button type="button" class="btn btn-primario ml-auto" @click="nuevo()" x-text="textoNuevo"></button>
+    <button type="button" class="btn btn-primario ml-auto" x-show="puede('crear')" @click="nuevo()" x-text="textoNuevo"></button>
   </div>
 
   <!-- Filtros -->
@@ -39,7 +39,7 @@
 
   <div x-show="lista.filas.length === 0 && !cargando" x-cloak class="mt-4 rounded-md border border-dashed border-borde bg-white px-6 py-14 text-center">
     <p class="font-titulo text-xl font-semibold">No hay registros con estos filtros</p>
-    <button type="button" class="btn btn-primario mt-4" @click="nuevo()" x-text="textoNuevo"></button>
+    <button type="button" class="btn btn-primario mt-4" x-show="puede('crear')" @click="nuevo()" x-text="textoNuevo"></button>
   </div>
 
   <!-- Tabla -->
@@ -61,9 +61,13 @@
             <td class="whitespace-nowrap px-3 py-2 tabular-nums text-gray-600" x-text="fechaTexto(m.fecha)"></td>
             <td class="max-w-[22rem] px-3 py-2"><p class="truncate font-medium" :class="m.anulado ? 'line-through' : ''" x-text="m.descripcion"></p><p class="truncate text-xs text-gray-500" x-show="m.tercero" x-text="m.tercero"></p></td>
             <td class="px-3 py-2 capitalize text-gray-600" x-text="tab === 'compras' ? m.lineas : m.tipo"></td>
-            <td class="px-3 py-2"><span class="insignia" :class="claseEstado(m)" x-text="textoEstado(m)"></span><span class="ml-1 text-xs text-gray-400" x-show="!m.contabilizado && !m.anulado" title="Registrado antes de iniciar la contabilidad">sin partida</span></td>
+            <td class="px-3 py-2"><span class="insignia" :class="claseEstado(m)" x-text="textoEstado(m)"></span><span class="ml-1 text-xs text-gray-400" x-show="!m.contabilizado && !m.anulado" title="Registrado antes de iniciar la contabilidad">sin partida</span><span class="mt-0.5 block text-xs text-gray-500 tabular-nums" x-show="detalleEstado(m)" x-text="detalleEstado(m)"></span></td>
             <td class="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums" :class="m.anulado ? 'text-gray-400 line-through' : (tab === 'ingresos' ? 'text-emerald-700' : 'text-red-700')" x-text="dinero(m.monto)"></td>
-            <td class="whitespace-nowrap px-3 py-2 text-right"><button type="button" class="btn-texto peligro" x-show="tab !== 'compras' && !m.anulado" @click="anulando = { m: m, motivo: '', error: '', guardando: false }">Anular</button></td>
+            <td class="whitespace-nowrap px-3 py-2 text-right">
+              <button type="button" class="btn-texto" x-show="puedePagar(m)" @click="pedirPago(m)" data-pagar-gasto>Pagar</button>
+              <a :href="'/finanzas/partidas?gasto=' + m.id" class="btn-texto apagar" x-show="tab === 'gastos' && m.contabilizado && puede('verAsiento')" data-ver-asiento-gasto>Ver asiento contable</a>
+              <button type="button" class="btn-texto peligro" x-show="tab !== 'compras' && !m.anulado && puede('anular')" @click="pedirAnular(m)">Anular</button>
+            </td>
           </tr>
         </template>
       </tbody>
@@ -79,7 +83,12 @@
           <p class="flex-none font-titulo text-xl font-semibold tabular-nums" :class="m.anulado ? 'text-gray-400 line-through' : (tab === 'ingresos' ? 'text-emerald-700' : 'text-red-700')" x-text="dinero(m.monto)"></p>
         </div>
         <div class="mt-2 flex flex-wrap items-center gap-2"><span class="insignia" :class="claseEstado(m)" x-text="textoEstado(m)"></span><span class="text-xs capitalize text-gray-500" x-show="tab !== 'compras'" x-text="m.tipo"></span></div>
-        <div class="mt-3 border-t border-borde pt-3" x-show="tab !== 'compras' && !m.anulado"><button type="button" class="btn btn-secundario h-11 w-full" @click="anulando = { m: m, motivo: '', error: '', guardando: false }">Anular</button></div>
+        <p class="mt-1 text-xs text-gray-500 tabular-nums" x-show="detalleEstado(m)" x-text="detalleEstado(m)"></p>
+        <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-borde pt-3" x-show="tab !== 'compras' && !m.anulado">
+          <button type="button" class="btn btn-primario h-11 flex-1" x-show="puedePagar(m)" @click="pedirPago(m)">Pagar</button>
+          <a :href="'/finanzas/partidas?gasto=' + m.id" class="btn-texto" x-show="tab === 'gastos' && m.contabilizado && puede('verAsiento')">Ver asiento contable</a>
+          <button type="button" class="btn btn-secundario h-11 flex-1" x-show="puede('anular')" @click="pedirAnular(m)">Anular</button>
+        </div>
       </article>
     </template>
   </div>
@@ -194,8 +203,40 @@
         <h2 class="font-titulo text-xl font-semibold" x-text="tab === 'ingresos' ? '¿Anular este ingreso?' : '¿Anular este gasto?'"></h2>
         <p class="mt-2 text-sm text-gray-600"><span class="font-medium text-tinta" x-text="anulando.m.descripcion"></span> por <span class="font-medium text-tinta tabular-nums" x-text="dinero(anulando.m.monto)"></span>. Se contrarresta su partida y deja de contar. No se puede anular si ya tiene cobros o pagos: anúlalos primero.</p>
         <div x-show="anulando.error" role="alert" class="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="anulando.error"></div>
-        <label class="etiqueta mt-3" for="am-motivo">Motivo <span class="font-normal text-gray-500">(opcional)</span></label><input id="am-motivo" class="campo" maxlength="200" x-model="anulando.motivo">
-        <div class="mt-4 flex gap-2"><button type="button" class="btn btn-secundario flex-1" @click="anulando = null" :disabled="anulando.guardando">Cancelar</button><button type="submit" class="btn btn-primario flex-1" :disabled="anulando.guardando" x-text="anulando.guardando ? 'Anulando…' : 'Sí, anular'"></button></div>
+        <div x-show="anulando.m.movido > 0" role="alert" class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-anular-con-pagos>
+          <span x-text="tab === 'ingresos' ? 'Este ingreso tiene cobros registrados. Anúlalos primero en Finanzas → Cuentas por cobrar.' : 'Este gasto tiene pagos registrados. Anúlalos primero en Finanzas → Cuentas por pagar.'"></span>
+        </div>
+        <div x-show="!(anulando.m.movido > 0)"><label class="etiqueta mt-3" for="am-motivo">Motivo <span class="font-normal text-gray-500">(opcional)</span></label><input id="am-motivo" class="campo" maxlength="200" x-model="anulando.motivo"></div>
+        <div class="mt-4 flex gap-2"><button type="button" class="btn btn-secundario flex-1" @click="anulando = null" :disabled="anulando.guardando">Cancelar</button><button type="submit" x-show="!(anulando.m.movido > 0)" class="btn btn-primario flex-1" :disabled="anulando.guardando" x-text="anulando.guardando ? 'Anulando…' : 'Sí, anular'"></button></div>
+      </div></template>
+    </form>
+  </div>
+
+  <!-- ===== Pagar un gasto por pagar ===== -->
+  <div x-show="pagando" x-cloak class="fixed inset-0 z-[55] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" id="modal-pagar-gasto" aria-labelledby="pg-titulo">
+    <div class="absolute inset-0 bg-tinta/50" @click="pagando = null"></div>
+    <form x-show="pagando" @submit.prevent="confirmarPago()" novalidate class="relative w-full max-w-md rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-lg">
+      <template x-if="pagando"><div>
+        <h2 id="pg-titulo" class="font-titulo text-xl font-semibold">Pagar gasto</h2>
+        <p class="mt-1 text-sm text-gray-600"><span class="font-medium text-tinta" x-text="pagando.m.descripcion"></span><span x-show="pagando.m.tercero" x-text="' · ' + pagando.m.tercero"></span></p>
+        <dl class="mt-3 grid grid-cols-3 gap-2 rounded-md bg-fondo px-3 py-2 text-sm">
+          <div><dt class="text-xs text-gray-500">Total</dt><dd class="font-medium tabular-nums" x-text="dinero(pagando.m.monto)"></dd></div>
+          <div><dt class="text-xs text-gray-500">Pagado</dt><dd class="font-medium tabular-nums" x-text="dinero(pagando.m.movido)"></dd></div>
+          <div><dt class="text-xs text-gray-500">Saldo</dt><dd class="font-semibold tabular-nums text-red-700" x-text="dinero(saldoDe(pagando.m))" data-saldo-gasto></dd></div>
+        </dl>
+        <div x-show="pagando.error" role="alert" class="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="pagando.error"></div>
+        <div class="mt-4 grid gap-4 sm:grid-cols-2">
+          <div><label class="etiqueta" for="pg-monto">Monto a pagar</label><input id="pg-monto" class="campo tabular-nums" type="number" inputmode="decimal" min="0.01" step="0.01" :max="saldoDe(pagando.m)" x-model="pagando.monto"></div>
+          <div><label class="etiqueta" for="pg-fecha">Fecha del pago</label><input id="pg-fecha" class="campo" type="date" :min="pagando.m.fecha" :max="d.estado.hoy" x-model="pagando.fecha"></div>
+        </div>
+        <div class="mt-4"><label class="etiqueta" for="pg-cuenta">El dinero sale de</label>
+          <select id="pg-cuenta" class="campo" x-model="pagando.cuenta"><option value="caja">Caja general</option><option value="bancos">Bancos</option></select>
+          <p class="ayuda">Se registra la partida Cuentas por pagar / <span x-text="pagando.cuenta === 'bancos' ? 'Bancos' : 'Caja'"></span>. Si pagas una parte, el resto sigue pendiente.</p></div>
+        <div class="mt-4"><label class="etiqueta" for="pg-notas">Notas <span class="font-normal text-gray-500">(opcional)</span></label><input id="pg-notas" class="campo" maxlength="300" x-model="pagando.notas" placeholder="Ej. transferencia 4521"></div>
+        <div class="mt-5 flex gap-2" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
+          <button type="button" class="btn btn-secundario flex-1" @click="pagando = null" :disabled="pagando.guardando">Cancelar</button>
+          <button type="submit" class="btn btn-primario flex-1" :disabled="pagando.guardando" x-text="pagando.guardando ? 'Registrando…' : 'Registrar pago'"></button>
+        </div>
       </div></template>
     </form>
   </div>

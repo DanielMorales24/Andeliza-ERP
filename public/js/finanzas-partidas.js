@@ -8,7 +8,8 @@ document.addEventListener('alpine:init', function () {
       vista: 'libro',
       libro: { partidas: [], hayMas: false, cantidad: 0 },
       balanza: { filas: [], debe: 0, haber: 0, cuadra: true },
-      f: { q: '', desde: '', hasta: '', cuenta: '', origen: '', orden: 'desc', venta: '' },
+      f: { q: '', desde: '', hasta: '', cuenta: '', origen: '', orden: 'desc', venta: '', gasto: '' },
+      filtroGasto: null,   // { id, descripcion, anulado } cuando se llega desde Movimientos con "Ver asiento contable"
       filtroVenta: null,   // { id, numero, anulada } cuando se llega desde Facturas con "Ver asiento contable"
       fb: { desde: '', hasta: '' },
       cargando: false,
@@ -26,6 +27,7 @@ document.addEventListener('alpine:init', function () {
         this.libro = this.d.libro;
         this.balanza = this.d.balanza;
         if (this.d.filtroVenta) { this.filtroVenta = this.d.filtroVenta; this.f.venta = String(this.d.filtroVenta.id); }
+        if (this.d.filtroGasto) { this.filtroGasto = this.d.filtroGasto; this.f.gasto = String(this.d.filtroGasto.id); }
         ['f.desde', 'f.hasta', 'f.cuenta', 'f.origen', 'f.orden'].forEach((k) => this.$watch(k, () => this.cargar(true)));
         this.$watch('f.q', () => { clearTimeout(this.temporizador); this.temporizador = setTimeout(() => this.cargar(true), 300); });
         ['fb.desde', 'fb.hasta'].forEach((k) => this.$watch(k, () => this.cargarBalanza()));
@@ -34,7 +36,9 @@ document.addEventListener('alpine:init', function () {
       // "Ver todos": deja de filtrar por la factura y quita ?venta= de la dirección
       quitarFiltroVenta() {
         this.filtroVenta = null;
+        this.filtroGasto = null;
         this.f.venta = '';
+        this.f.gasto = '';
         try { window.history.replaceState(null, '', window.location.pathname); } catch (e) { /* nada */ }
         this.cargar(true);
       },
@@ -55,7 +59,7 @@ document.addEventListener('alpine:init', function () {
         if (this.f.desde && this.f.hasta && this.f.desde > this.f.hasta) { this.error = 'La fecha inicial no puede ser mayor que la final.'; return; }
         this.cargando = true;
         try {
-          const p = new URLSearchParams({ q: this.f.q.trim(), desde: this.f.desde, hasta: this.f.hasta, cuenta: this.f.cuenta, origen: this.f.origen, venta: this.f.venta, orden: this.f.orden, offset: reiniciar ? 0 : this.libro.partidas.length });
+          const p = new URLSearchParams({ q: this.f.q.trim(), desde: this.f.desde, hasta: this.f.hasta, cuenta: this.f.cuenta, origen: this.f.origen, venta: this.f.venta, gasto: this.f.gasto, orden: this.f.orden, offset: reiniciar ? 0 : this.libro.partidas.length });
           const r = await api('/finanzas/partidas/datos?' + p);
           if (mia !== this.secuencia) return;
           if (reiniciar) this.libro = { partidas: r.partidas, hayMas: r.hayMas, cantidad: r.cantidad };

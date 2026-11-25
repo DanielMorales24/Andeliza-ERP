@@ -43,10 +43,12 @@ async function ingresos(o) {
 async function gastos(o) {
   const f = filtros('x', o, ['x.descripcion', "COALESCE(p.nombre, '')"]);
   condEstado(f, 'estado_pago', o.estado);
+  // movido = lo pagado (pagos vigentes); cuenta = de dónde salió el dinero si se registró ya pagado
   const base = `SELECT x.id, x.fecha, x.categoria AS tipo, x.descripcion, x.monto, x.estado_pago AS estado, x.fecha_vencimiento, x.anulado,
-                       COALESCE(p.nombre, '') AS tercero, (x.partida_id IS NOT NULL) AS contabilizado,
-                       COALESCE((SELECT SUM(a.monto) FROM pagos_proveedores a WHERE a.gasto_id = x.id AND NOT a.anulado), 0) AS movido
-                  FROM gastos x LEFT JOIN proveedores p ON p.id = x.proveedor_id`;
+                       COALESCE(p.nombre, '') AS tercero, (x.partida_id IS NOT NULL) AS contabilizado, pc.nombre AS cuenta,
+                       COALESCE((SELECT SUM(a.monto) FROM pagos_proveedores a WHERE a.gasto_id = x.id AND NOT a.anulado), 0) AS movido,
+                       (SELECT COUNT(*) FROM pagos_proveedores a WHERE a.gasto_id = x.id AND NOT a.anulado) AS pagos
+                  FROM gastos x LEFT JOIN proveedores p ON p.id = x.proveedor_id LEFT JOIN plan_cuentas pc ON pc.id = x.cuenta_id`;
   return pagina(base, f, 'ORDER BY fecha DESC, id DESC', o.offset || 0, 50);
 }
 
@@ -95,6 +97,16 @@ async function anularGasto(id, usuarioId, motivo) {
   return (await db.query('SELECT anular_gasto($1,$2,$3) AS r', [id, usuarioId, motivo])).rows[0].r;
 }
 
+// Un gasto con lo pagado y el saldo (para el libro diario filtrado y las comprobaciones)
+async function obtenerGasto(id) {
+  const { rows } = await db.query(
+    `SELECT g.id, g.descripcion, g.monto, g.estado_pago, g.anulado, g.fecha,
+            COALESCE((SELECT SUM(a.monto) FROM pagos_proveedores a WHERE a.gasto_id = g.id AND NOT a.anulado), 0) AS pagado
+       FROM gastos g WHERE g.id = $1`, [id]
+  );
+  return rows[0] ? { ...rows[0], saldo: Math.round((rows[0].monto - rows[0].pagado) * 100) / 100 } : null;
+}
+
 // Datos para los formularios
 async function catalogosFormularios() {
   const [clientes, proveedores, productos] = await Promise.all([
@@ -110,4 +122,4 @@ async function catalogosFormularios() {
   return { clientes: clientes.rows, proveedores: proveedores.rows, productos: productos.rows };
 }
 
-module.exports = { listar, registrarIngreso, registrarGasto, registrarCompra, anularIngreso, anularGasto, catalogosFormularios };
+module.exports = { listar, registrarIngreso, registrarGasto, registrarCompra, anularIngreso, anularGasto, obtenerGasto, catalogosFormularios };
