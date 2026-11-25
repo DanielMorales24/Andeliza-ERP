@@ -1,0 +1,105 @@
+# Integración continua de Andeliza ERP: en cada push y en cada Pull Request hacia main se instalan las
+# dependencias, se levanta un PostgreSQL 15 desechable, se aplican las migraciones 01 → 09 y se corren
+# las pruebas unitarias, de integración y de extremo a extremo (E2E).
+#
+# La base es SIEMPRE la del contenedor de este job (localhost, nombre andeliza_test): no hay secretos ni
+# URL de Supabase en este archivo, y tests/soporte/guardas.js detiene las pruebas si la URL no es local.
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    name: Pruebas (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20 es la versión pedida para el pipeline; 24 es la que usa Vercel en producción (package.json → engines)
+        node: [20, 24]
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: andeliza
+          POSTGRES_PASSWORD: andeliza_ci
+          POSTGRES_DB: andeliza_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U andeliza -d andeliza_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      TZ: America/Tegucigalpa
+      DATABASE_URL: postgresql://andeliza:andeliza_ci@localhost:5432/andeliza_test
+      SESSION_SECRET: solo-para-ci
+      SUPABASE_URL: ''
+      SUPABASE_KEY: ''
+      PUERTO_E2E: '3100'
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Revisar la sintaxis de todos los archivos JavaScript
+        run: git ls-files '*.js' | xargs -n 1 node --check
+
+      - name: Comprobar que la base es local y de pruebas
+        run: node -e "console.log('Base de pruebas:', require('./tests/soporte/guardas').validarBaseDePruebas(process.env.DATABASE_URL))"
+
+      - name: Aplicar las migraciones 01 → 09 y functions.sql
+        env:
+          PGOPTIONS: -c client_min_messages=warning   # sin los avisos de "ya existe, se omite"
+        run: |
+          for f in $(ls db/migrations/[0-9][0-9]_*.sql | sort); do
+            echo "▶ $f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+          echo "▶ db/functions.sql"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f db/functions.sql
+          psql "$DATABASE_URL" -At -c "SELECT 'Tablas y vistas: ' || COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'"
+
+      - name: Pruebas unitarias y de integración
+        run: npm test
+
+      - name: Instalar el navegador para la prueba E2E
+        run: npx playwright install --with-deps chromium
+
+      - name: Prueba de extremo a extremo (Playwright)
+        run: npm run test:e2e
+
+      - name: Guardar el reporte de Playwright si algo falló
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-playwright-node-${{ matrix.node }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

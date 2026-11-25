@@ -21,6 +21,7 @@ document.addEventListener('alpine:init', function () {
       error: '',
       guardando: false,
       anulando: null,
+      pagando: null,     // { m, monto, fecha, cuenta, notas, guardando, error }
       fs: {},
       fc: { items: [] },
       busquedaProd: '',
@@ -60,6 +61,17 @@ document.addEventListener('alpine:init', function () {
         if (this.tab === 'ingresos') return m.estado === 'C' ? 'Cobrado' : (m.movido > 0 ? 'Cobro parcial' : 'Por cobrar');
         return m.estado === 'C' ? 'Pagado' : (m.movido > 0 ? 'Pago parcial' : 'Por pagar');
       },
+      // Permisos que manda el servidor (las rutas los vuelven a exigir)
+      puede(accion) { return !this.d.permisos || this.d.permisos[accion] === true; },
+      saldoDe(m) { return r2(Number(m.monto) - Number(m.movido || 0)); },
+      // Debajo de la condición: el saldo si hay pagos parciales, o de dónde salió el dinero
+      detalleEstado(m) {
+        if (m.anulado || this.tab === 'compras') return '';
+        if (m.estado === 'P' && m.movido > 0) return 'Saldo ' + dinero(this.saldoDe(m)) + ' de ' + dinero(m.monto);
+        if (this.tab === 'gastos' && m.estado === 'C' && m.cuenta) return 'Salió de ' + m.cuenta;
+        return '';
+      },
+      puedePagar(m) { return this.tab === 'gastos' && !m.anulado && m.estado === 'P' && m.contabilizado && this.puede('crear'); },
       claseEstado(m) {
         if (m.anulado) return 'ins-neutra';
         return m.estado === 'C' ? 'ins-ok' : 'ins-bajo';
@@ -88,6 +100,7 @@ document.addEventListener('alpine:init', function () {
       nuevo() { this.abrir({ ingresos: 'ingreso', gastos: 'gasto', compras: 'compra' }[this.tab]); },
       cerrar() {
         if (this.anulando) { if (!this.anulando.guardando) this.anulando = null; return; }
+        if (this.pagando) { if (!this.pagando.guardando) this.pagando = null; return; }
         if (!this.guardando) { this.modal = ''; this.error = ''; }
       },
       abrir(tipo) {
@@ -163,7 +176,27 @@ document.addEventListener('alpine:init', function () {
         } catch (e) { this.error = e.message; this.guardando = false; }
       },
 
+      // ---------- Pagar un gasto por pagar ----------
+      pedirPago(m) {
+        this.pagando = { m: m, monto: this.saldoDe(m).toFixed(2), fecha: this.d.estado.hoy, cuenta: 'caja', notas: '', guardando: false, error: '' };
+      },
+      async confirmarPago() {
+        const p = this.pagando;
+        p.error = '';
+        const monto = Number(p.monto);
+        if (!(monto > 0)) { p.error = 'Escribe un monto mayor que cero.'; return; }
+        if (monto > this.saldoDe(p.m) + 1e-9) { p.error = 'El pago no puede ser mayor que el saldo (' + dinero(this.saldoDe(p.m)) + ').'; return; }
+        p.guardando = true;
+        try {
+          const r = await api('/finanzas/cxp/pagos', { method: 'POST', body: { origen: 'gasto', doc_id: p.m.id, monto: p.monto, fecha: p.fecha, cuenta: p.cuenta, notas: p.notas } });
+          this.pagando = null;
+          toast(r.pagada ? 'Gasto pagado por completo.' : 'Pago registrado. Queda un saldo de ' + dinero(r.saldo) + '.');
+          await this.cargar(true);
+        } catch (e) { p.error = e.message; p.guardando = false; }
+      },
+
       // ---------- Anular ----------
+      pedirAnular(m) { this.anulando = { m: m, motivo: '', error: '', guardando: false }; },
       async confirmarAnular() {
         const a = this.anulando;
         a.guardando = true; a.error = '';

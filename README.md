@@ -132,6 +132,22 @@ Necesitas Node.js 20, Git y una cuenta gratuita de Supabase. Para publicarlo, un
 
 El detalle está en [db/README.md](db/README.md#instalación-de-una-instancia-nueva-producción).
 
+### Correr las pruebas
+
+Las pruebas usan **su propia base local**, `andeliza_test`, que borran y vuelven a crear en cada corrida. Nunca leen `.env` ni se conectan a Supabase: si la dirección de la base no es `localhost` o su nombre no termina en `_test`, se detienen antes de tocar nada.
+
+```bash
+createdb -h localhost -U postgres andeliza_test   # una sola vez, con PostgreSQL 15 o superior en el puerto 5432
+cp .env.test.example .env.test                    # una sola vez; ajusta la contraseña de tu PostgreSQL
+npx playwright install chromium                   # una sola vez, el navegador de la prueba E2E
+
+npm test                   # unitarias + integración (Jest y Supertest)
+npm run test:integration   # solo integración
+npm run test:e2e           # extremo a extremo (Playwright)
+```
+
+En GitHub, el workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) corre lo mismo en cada `push` y Pull Request, con Node 20 y 24 y un PostgreSQL 15 desechable. La estrategia completa, qué cubre cada prueba y por qué nunca se usa producción está en [docs/pruebas.md](docs/pruebas.md).
+
 ## Estructura del repositorio
 
 ```text
@@ -147,6 +163,7 @@ andeliza-erp/
 │   ├── permisos.md            Roles, permisos y qué pide cada ruta
 │   ├── referencia-tecnica.md  Pantallas, endpoints y reglas de negocio
 │   ├── pruebas-usuarios.md    Pruebas con usuarias reales
+│   ├── pruebas.md             Estrategia de pruebas automatizadas
 │   ├── evidencias/            Capturas y documentos de respaldo
 │   └── bitacora/              Una bitácora por semana
 ├── db/
@@ -155,6 +172,14 @@ andeliza-erp/
 │   ├── seed.sql               Datos de prueba (desarrollo)
 │   ├── seed-produccion.sql    Datos mínimos de una instancia nueva (producción)
 │   └── README.md              Orden de ejecución
+├── tests/
+│   ├── unit/                  Funciones puras (totales, validación, errores, guardas)
+│   ├── integration/           Rutas HTTP y funciones de la base, contra andeliza_test
+│   ├── e2e/                   Flujo de venta en un navegador real (Playwright)
+│   ├── fixtures/              Datos inventados de la base de pruebas
+│   └── soporte/               Guardas, reconstrucción de la base y sesión HTTP
+├── .github/workflows/ci.yml   Pruebas en cada push y Pull Request
+├── jest.config.js  playwright.config.js  .env.test.example
 ├── github-issues/
 │   └── issues_mvp.md          Historias con criterios de aceptación
 ├── api/index.js               Entrada serverless de Vercel
@@ -178,6 +203,7 @@ Pantallas principales: `/` (panel de inicio), `/pos`, `/facturas`, `/inventario`
 - [Permisos y roles](docs/permisos.md)
 - [Referencia técnica](docs/referencia-tecnica.md)
 - [Pruebas con usuarios](docs/pruebas-usuarios.md)
+- [Estrategia de pruebas automatizadas](docs/pruebas.md)
 - [Historias para GitHub Issues](github-issues/issues_mvp.md)
 - [Bitácoras semanales](docs/bitacora/)
 
@@ -193,7 +219,7 @@ Andeliza ERP está en desarrollo y hay decisiones tomadas a propósito para avan
 - **Contraseña temporal del seed de producción.** El repositorio solo trae un marcador; la contraseña se pone en una copia local al instalar y el sistema obliga a cambiarla. Hay que hacerlo antes de dar a conocer la dirección de la instancia.
 - **Facturación fiscal.** El sistema controla la numeración, el rango y la fecha límite del CAI e imprime los datos requeridos, pero no está certificado ni envía facturas al SAR. El formato debe validarse con un contador.
 - **Anulación de facturas.** Es total (no hay devoluciones parciales) y no emite una nota de crédito: el número de una factura con CAI anulada queda usado y, si ya se entregó al cliente, el contador decide cómo regularizarla.
-- **Sin pruebas automatizadas dentro del repositorio.** Las baterías de prueba se corrieron durante el desarrollo y todavía no forman parte del repo.
+- **Pruebas automatizadas acotadas a los focos de riesgo.** Cubren el dinero, las reglas de anulación, los permisos, el flujo de gastos y el cobro en el punto de venta de punta a punta ([docs/pruebas.md](docs/pruebas.md)). Las demás pantallas y el contenido de los PDF todavía se revisan a mano.
 - **Pendientes de producto.** Métodos de pago, devoluciones y notas de crédito, y crédito fiscal sobre las compras.
 
 ## Autor

@@ -14,6 +14,7 @@ const crear = permiso('crear');
 const editar = permiso('editar');
 const anular = permiso('eliminar');
 const monto = (req) => (req.body && req.body.monto ? ` de L ${req.body.monto}` : '');
+const motivo = (req) => (req.body && typeof req.body.motivo === 'string' && req.body.motivo.trim() ? `: ${req.body.motivo.trim().slice(0, 200)}` : '');
 const conCompras = [requireFuncionalidad('compras')];
 
 router.get('/', ...ver, F.resumen);
@@ -36,9 +37,9 @@ for (const tipo of ['cxc', 'cxp']) {
 router.get('/movimientos', ...ver, M.pagina);
 router.get('/movimientos/datos', ...ver, M.datos);
 router.post('/ingresos', ...crear, auditar('crear_ingreso', 'ingresos', (req) => `Registró un ingreso${monto(req)}`), M.crearIngreso);
-router.post('/ingresos/:id(\\d+)/anular', ...anular, auditar('anular_ingreso', 'ingresos', (req) => `Anuló el ingreso #${req.params.id}`), M.anularIngreso);
+router.post('/ingresos/:id(\\d+)/anular', ...anular, auditar('anular_ingreso', 'ingresos', (req) => `Anuló el ingreso #${req.params.id}${motivo(req)}`), M.anularIngreso);
 router.post('/gastos', ...crear, auditar('crear_gasto', 'gastos', (req) => `Registró un gasto${monto(req)}`), M.crearGasto);
-router.post('/gastos/:id(\\d+)/anular', ...anular, auditar('anular_gasto', 'gastos', (req) => `Anuló el gasto #${req.params.id}`), M.anularGasto);
+router.post('/gastos/:id(\\d+)/anular', ...anular, auditar('anular_gasto', 'gastos', (req) => `Anuló el gasto #${req.params.id}${motivo(req)}`), M.anularGasto);
 router.post('/compras', ...crear, ...conCompras, auditar('crear_compra', 'compras', 'Registró una compra a proveedor'), M.crearCompra);
 
 router.get('/partidas', ...ver, F.partidas);

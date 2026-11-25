@@ -1,0 +1,143 @@
+# Corrida local del 2026-11-24 · Node v22.23.4 · PostgreSQL 16.15 · base andeliza_test (local, reconstruida en cada archivo)
+
+$ npm test -- --verbose
+
+> sistema-erp-base@0.1.0 test
+> jest --verbose
+
+PASS integracion tests/integration/permisos.test.js
+  el vendedor no entra a Finanzas
+    ✓ GET /finanzas responde 403 (la página de "Sin permiso") (16 ms)
+    ✓ tampoco por las rutas de datos que usan las pantallas (JSON) (28 ms)
+    ✓ ni puede registrar un gasto (10 ms)
+  anular una factura es solo para administrador y supervisor
+    ✓ el vendedor recibe 403, aunque sea su propia venta, y la factura sigue vigente (9 ms)
+    ✓ el contador también recibe 403 (6 ms)
+    ✓ el supervisor sí puede (control: la ruta funciona para quien tiene el permiso) (12 ms)
+  sin sesión
+    ✓ una página protegida manda al inicio de sesión (4 ms)
+    ✓ una acción protegida no se ejecuta (4 ms)
+
+PASS integracion tests/integration/gastos.test.js
+  registrar un gasto
+    ✓ pagado en efectivo: Debe Gasto operativo / Haber Caja por el monto (20 ms)
+    ✓ pagado desde Bancos: el Haber va a Bancos (8 ms)
+    ✓ por pagar: Debe Gasto / Haber Cuentas por pagar, y aparece en Cuentas por pagar con su saldo (16 ms)
+    ✓ rechaza una categoría que no existe (422) y no registra nada (5 ms)
+    ✓ rechaza monto cero (422) y no registra nada (5 ms)
+    ✓ rechaza más de 2 decimales (422) y no registra nada (6 ms)
+    ✓ rechaza sin descripción (422) y no registra nada (4 ms)
+    ✓ rechaza pagado sin decir de qué cuenta sale (422) y no registra nada (3 ms)
+    ✓ un vencimiento anterior a la fecha del gasto se rechaza (4 ms)
+  pagar un gasto por pagar
+    ✓ un pago parcial desde Bancos: Debe Cuentas por pagar / Haber Bancos, y el saldo baja (11 ms)
+    ✓ pagar más que el saldo se rechaza (4 ms)
+    ✓ el resto desde Caja deja el gasto pagado y fuera de Cuentas por pagar (27 ms)
+    ✓ un gasto ya pagado no se puede volver a pagar (5 ms)
+    ✓ Cuentas por pagar queda en cero para este gasto: lo que se acreditó se debitó (1 ms)
+  anular un gasto
+    ✓ un gasto pagado se anula con la contrapartida exacta y sale de los totales (38 ms)
+    ✓ un gasto con pagos vigentes NO se anula; anulado el pago, sí, y Cuentas por pagar se compensa (52 ms)
+    ✓ un gasto anulado no se puede pagar ni anular otra vez (32 ms)
+  lo que ve la persona
+    ✓ la lista de gastos dice cuánto se ha pagado, el saldo y de qué cuenta salió (39 ms)
+    ✓ "Ver asiento contable" de un gasto muestra el gasto, sus pagos y sus anulaciones, y nada más (50 ms)
+    ✓ la pantalla de movimientos ofrece Pagar y Ver asiento a quien tiene permiso (18 ms)
+    ✓ al final de todo el flujo, cada partida y la balanza cuadran (1 ms)
+
+PASS integracion tests/integration/anulacion.test.js
+  anular_venta: la contrapartida y el stock
+    ✓ la venta descontó lo vendido (control de la preparación)
+    ✓ el supervisor la anula y la respuesta dice que se revirtió la contabilidad
+    ✓ el stock vuelve exactamente a como estaba: producto, variante y cada componente del kit (1 ms)
+    ✓ la contrapartida es la partida original con el Debe y el Haber invertidos, línea por línea (3 ms)
+    ✓ la contrapartida queda ligada a la original y entre las dos cada cuenta suma cero (2 ms)
+    ✓ no se borra nada: la venta, su detalle y su partida siguen, marcadas y con el motivo (2 ms)
+    ✓ queda la constancia en la auditoría con el stock devuelto (7 ms)
+    ✓ no se puede anular dos veces ni se crea una segunda contrapartida (8 ms)
+  anular_venta: una factura con abonos vigentes se rechaza
+    ✓ por HTTP: responde 422 con el mensaje de anular primero los abonos (5 ms)
+    ✓ llamando a la base directamente: la función también la rechaza (17 ms)
+    ✓ el rechazo no cambia nada: ni la venta, ni el stock, ni la contabilidad (5 ms)
+    ✓ anulado el abono, la factura sí se anula, vuelve el stock y sale de Cuentas por cobrar (26 ms)
+  anular_venta: otras reglas
+    ✓ sin motivo, o con menos de 5 caracteres, no se anula (22 ms)
+    ✓ el número de una factura anulada no se reutiliza (30 ms)
+
+PASS integracion tests/integration/dinero-ventas.test.js
+  contabilizar_venta: a qué cuenta va el dinero
+    ✓ una venta en efectivo carga Caja por el total y no toca Bancos ni Cuentas por cobrar (25 ms)
+    ✓ una venta con tarjeta carga Bancos por el total y no toca Caja (12 ms)
+    ✓ una venta por transferencia también va a Bancos (8 ms)
+    ✓ una venta al crédito carga Cuentas por cobrar y no guarda método aunque el navegador mande uno (10 ms)
+    ✓ la partida completa: Ventas por el subtotal, Impuesto por pagar por el ISV y el costo contra Inventario (9 ms)
+    ✓ un cobro sin método (pantalla de la versión anterior) se toma como efectivo (13 ms)
+    ✓ un método que no existe o que el negocio no activó se rechaza y no crea la venta (7 ms)
+    ✓ la base rechaza un método desconocido aunque alguien llame a la función sin pasar por la aplicación (2 ms)
+    ✓ después de todas las ventas, cada partida y la balanza cuadran (1 ms)
+  cobrar desde Facturas una venta al crédito
+    ✓ "Marcar pagada" con transferencia registra el abono en Bancos y baja Cuentas por cobrar (20 ms)
+
+PASS unit tests/unit/totales.test.js
+  calcularTotales: impuesto aparte (como está configurado el negocio)
+    ✓ una línea de L 100 con ISV 15 % da subtotal 100, impuesto 15 y total 115
+    ✓ suma varias líneas y redondea el impuesto a 2 decimales (mitad hacia arriba)
+    ✓ el total siempre es subtotal + impuesto, exacto al centavo
+  calcularTotales: precios con el impuesto incluido
+    ✓ L 115 con ISV incluido se separa en 100 de subtotal y 15 de impuesto
+    ✓ L 100 con ISV incluido: 86.96 + 13.04 (el total no cambia)
+  importeLinea
+    ✓ cantidades con decimales se redondean al centavo, sin errores de coma flotante
+
+PASS unit tests/unit/validar.test.js
+  dinero
+    ✓ acepta montos con hasta 2 decimales y coma o punto decimal
+    ✓ rechaza "" con el mensaje "es obligatorio" (3 ms)
+    ✓ rechaza "0" con el mensaje "debe ser mayor que cero" (4 ms)
+    ✓ rechaza "-5" con el mensaje "debe ser mayor que cero" (1 ms)
+    ✓ rechaza "10.005" con el mensaje "no puede tener más de 2 decimales"
+    ✓ rechaza "diez" con el mensaje "debe ser un número"
+  eleccion (métodos de pago, categorías)
+    ✓ devuelve el valor si está entre los permitidos
+    ✓ sin valor usa el predeterminado (una pantalla vieja que no manda el método) (1 ms)
+    ✓ un valor que el negocio no tiene activo se rechaza
+  cuentaEfectivo
+    ✓ solo acepta caja o bancos (1 ms)
+  fechaISO
+    ✓ acepta fechas reales y rechaza las imposibles
+  idOpcional
+    ✓ convierte ids válidos y rechaza los que no son enteros positivos (1 ms)
+
+PASS unit tests/unit/guardas.test.js
+  validarBaseDePruebas
+    ✓ acepta una base local cuyo nombre termina en _test (1 ms)
+    ✓ rechaza Supabase (producción) (1 ms)
+    ✓ rechaza otro servidor (1 ms)
+    ✓ rechaza base de desarrollo
+    ✓ rechaza base sin nombre (1 ms)
+    ✓ rechaza vacía
+    ✓ rechaza otro motor
+    ✓ el mensaje de error no muestra la contraseña (1 ms)
+
+PASS unit tests/unit/errores.test.js
+  manejarErrores
+    ✓ un rechazo de la base (P0001) llega como 422 con el mismo mensaje (1 ms)
+    ✓ un ErrorValidacion también es 422
+    ✓ un error desconocido es 500 y no muestra detalles internos (1 ms)
+  traducirErrorDB
+    ✓ un SKU repetido se explica en palabras (1 ms)
+    ✓ un error que no conoce devuelve null
+
+Test Suites: 8 passed, 8 total
+Tests:       84 passed, 84 total
+Snapshots:   0 total
+Time:        4.077 s, estimated 5 s
+Ran all test suites in 2 projects.
+
+$ npm run test:e2e
+> sistema-erp-base@0.1.0 test:e2e
+> playwright test
+[WebServer] Servidor de pruebas E2E en http://127.0.0.1:3100
+Running 1 test using 1 worker
+  ✓  1 [chromium] › tests/e2e/flujo-venta.spec.js:12:1 › el administrador cobra una venta en efectivo, ve el comprobante y el stock se descuenta (2.8s)
+  1 passed (4.3s)

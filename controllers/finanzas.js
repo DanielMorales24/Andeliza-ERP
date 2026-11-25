@@ -7,6 +7,7 @@ const Contab = require('../models/contabilidad');
 const Cartera = require('../models/cartera');
 const Negocio = require('../models/negocio');
 const Ventas = require('../models/ventas');
+const Mov = require('../models/movimientos');
 const { numeroCorto } = require('../utils/documentos');
 const Pdf = require('../services/reportesPdfService');
 
@@ -53,6 +54,7 @@ function leerFiltrosLibro(q) {
     cuenta: V.idOpcional(q.cuenta, 'La cuenta'),
     origen: V.texto(q.origen),
     venta: V.idOpcional(q.venta, 'La factura'),
+    gasto: V.idOpcional(q.gasto, 'El gasto'),
     q: V.texto(q.q).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().slice(0, 60),
     orden: q.orden === 'asc' ? 'asc' : 'desc',
     offset: Number.isInteger(Number(q.offset)) && Number(q.offset) > 0 ? Math.min(Number(q.offset), 100000) : 0,
@@ -64,17 +66,22 @@ function leerFiltrosLibro(q) {
 
 async function partidas(req, res, next) {
   try {
-    // Desde Facturas → "Ver asiento contable" llega ?venta=ID: el libro abre filtrado por esa factura
-    let venta = null;
-    try { venta = V.idOpcional(req.query.venta, 'La factura'); } catch (_) { venta = null; }
+    // "Ver asiento contable" llega con ?venta=ID (desde Facturas) o ?gasto=ID (desde Movimientos):
+    // el libro abre filtrado por ese documento. Un número malo se ignora y se muestra todo.
+    const idDe = (v) => { try { return V.idOpcional(v, 'El documento'); } catch (_) { return null; } };
+    const venta = idDe(req.query.venta);
     const factura = venta ? await Ventas.obtener(venta) : null;
     const filtroVenta = factura
       ? { id: factura.id, numero: numeroCorto(factura.numero_factura, factura.tipo_documento), anulada: factura.anulada === true }
       : null;
+    const gastoId = filtroVenta ? null : idDe(req.query.gasto);
+    const gasto = gastoId ? await Mov.obtenerGasto(gastoId) : null;
+    const filtroGasto = gasto ? { id: gasto.id, descripcion: gasto.descripcion, anulado: gasto.anulado === true } : null;
+    const filtro = filtroVenta ? { venta: String(filtroVenta.id) } : (filtroGasto ? { gasto: String(filtroGasto.id) } : {});
     const [libro, cuentas, balanza] = await Promise.all([
-      Contab.libro(leerFiltrosLibro(filtroVenta ? { venta: String(filtroVenta.id) } : {})), Contab.cuentas(), Contab.balanza(null, null),
+      Contab.libro(leerFiltrosLibro(filtro)), Contab.cuentas(), Contab.balanza(null, null),
     ]);
-    res.render('finanzas/partidas', { titulo: 'Libro diario', seccion: 'partidas', datos: { libro, cuentas, balanza, origenes: ORIGENES, estado: await Contab.estado(), filtroVenta } });
+    res.render('finanzas/partidas', { titulo: 'Libro diario', seccion: 'partidas', datos: { libro, cuentas, balanza, origenes: ORIGENES, estado: await Contab.estado(), filtroVenta, filtroGasto } });
   } catch (err) { next(err); }
 }
 

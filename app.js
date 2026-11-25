@@ -1,4 +1,6 @@
-require('dotenv').config();
+// Las pruebas (NODE_ENV=test) nunca leen .env: ahí puede estar la base de producción. Sus variables
+// salen de .env.test o del pipeline, y tests/soporte/entorno.js comprueba que apunten a una base local de pruebas.
+if (process.env.NODE_ENV !== 'test') require('dotenv').config();
 
 const path = require('path');
 const express = require('express');
@@ -107,7 +109,9 @@ app.use((req, res) => {
 // Todo error termina aquí: los esperados vuelven con su mensaje, el resto queda en los logs de Vercel
 app.use(manejarErrores(enProduccion));
 
-if (process.env.NODE_ENV !== 'production') {
+// Solo escucha cuando se ejecuta directamente (npm run dev / npm start). En Vercel (api/index.js) y en las
+// pruebas (Supertest) la app se importa y quien la importa decide.
+if (require.main === module && process.env.NODE_ENV !== 'production') {
   const puerto = process.env.PORT || 3000;
   app.listen(puerto, () => console.log(`http://localhost:${puerto}`));
 }
